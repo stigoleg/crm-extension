@@ -1,0 +1,580 @@
+/* Scoped to #sncrm-overview-panel to avoid bleeding into the ServiceNow page.
+ * No global selectors. CSS custom properties keep the surface themeable. */
+
+#sncrm-overview-panel {
+  --sncrm-bg: #ffffff;
+  --sncrm-bg-soft: #fafbfc;
+  --sncrm-fg: #111827;
+  --sncrm-muted: #6b7280;
+  --sncrm-border: #e5e7eb;
+  --sncrm-border-strong: #d1d5db;
+  --sncrm-accent: #2563eb;
+  --sncrm-accent-soft: #eff6ff;
+  --sncrm-empty: #9ca3af;
+  --sncrm-red: #dc2626;
+  --sncrm-red-soft: #fef2f2;
+  --sncrm-orange: #d97706;
+  --sncrm-orange-soft: #fffbeb;
+  --sncrm-green: #059669;
+  --sncrm-green-soft: #ecfdf5;
+  --sncrm-radius: 0;
+  --sncrm-shadow: 0 1px 0 rgba(15, 23, 42, 0.03), 0 4px 12px rgba(15, 23, 42, 0.10);
+
+  all: initial;
+  display: block;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--sncrm-fg);
+  /* Panel itself is a transparent, click-through container. The CRM top bar
+   * shows through the empty airspace; only the body and the floating
+   * header buttons catch pointer events. */
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  pointer-events: none;
+  contain: layout paint;
+  overflow: visible;
+  /* Paint containment clips absolutely positioned descendants to the panel
+   * border-box. Keep a collapsed-height footprint so hiding `.sncrm-body`
+   * doesn't collapse the root to 0px and clip the floating header buttons. */
+  min-height: var(--sncrm-topbar-height, 55px);
+}
+
+.sncrm-resize-handle {
+  position: sticky;
+  bottom: -22px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  margin-top: 8px;
+  cursor: ns-resize;
+  background: transparent;
+  border-top: 1px solid transparent;
+  transition: background 120ms ease, border-color 120ms ease;
+  touch-action: none;
+  pointer-events: auto;
+}
+.sncrm-resize-handle::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 36px;
+  height: 3px;
+  border-radius: 999px;
+  background: var(--sncrm-border-strong, #d1d5db);
+  transform: translate(-50%, -50%);
+  opacity: 0.5;
+  transition: opacity 120ms ease, background 120ms ease;
+}
+.sncrm-resize-handle:hover,
+.sncrm-resize-handle:focus-visible {
+  background: var(--sncrm-accent-soft, #eff6ff);
+  border-top-color: var(--sncrm-border, #e5e7eb);
+  outline: none;
+}
+.sncrm-resize-handle:hover::after,
+.sncrm-resize-handle:focus-visible::after {
+  background: var(--sncrm-accent, #2563eb);
+  opacity: 1;
+}
+
+#sncrm-overview-panel.is-collapsed .sncrm-resize-handle { display: none; }
+
+#sncrm-overview-panel *,
+#sncrm-overview-panel *::before,
+#sncrm-overview-panel *::after {
+  box-sizing: border-box;
+  font: inherit;
+  color: inherit;
+}
+
+/* Floating controls cluster. Anchored top-right so it doesn't overlap the
+ * CRM logo/search. Background is transparent — individual buttons carry
+ * their own chrome so clicks pass through the gaps to the CRM header. */
+#sncrm-overview-panel .sncrm-header {
+  position: absolute;
+  top: 10px;
+  left: 120px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  pointer-events: none;
+}
+
+#sncrm-overview-panel .sncrm-btn {
+  appearance: none;
+  border: 1px solid var(--sncrm-border-strong);
+  background: #fff;
+  color: var(--sncrm-fg);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.2;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+  pointer-events: auto;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+}
+#sncrm-overview-panel .sncrm-btn:hover {
+  background: var(--sncrm-bg-soft);
+  border-color: #9ca3af;
+}
+#sncrm-overview-panel .sncrm-btn:focus-visible {
+  outline: 2px solid var(--sncrm-accent);
+  outline-offset: 2px;
+}
+
+/* Primary toggle — filled accent, larger, shadowed. Highly visible so
+ * users immediately recognize it as the main action. */
+#sncrm-overview-panel .sncrm-btn-toggle {
+  background: var(--sncrm-accent);
+  border-color: var(--sncrm-accent);
+  color: #fff;
+  padding: 7px 20px;
+  font-size: 13px;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.28);
+}
+#sncrm-overview-panel .sncrm-btn-toggle:hover {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+  box-shadow: 0 3px 8px rgba(37, 99, 235, 0.30);
+}
+#sncrm-overview-panel .sncrm-btn-toggle:active {
+  background: #1e40af;
+  border-color: #1e40af;
+}
+
+/* Narrow screens: collapse the header to just the primary toggle, pinned
+ * left-center with a 7px gutter. Refresh/Configure are hidden — users can
+ * still reach Configure via the extension icon popup. */
+@media (max-width: 720px) {
+  #sncrm-overview-panel .sncrm-header {
+    top: 10px;
+    left: 7px;
+    right: auto;
+    transform: none;
+  }
+  #sncrm-overview-panel .sncrm-header .sncrm-btn:not(.sncrm-btn-toggle) {
+    display: none;
+  }
+  #sncrm-overview-panel .sncrm-body {
+    margin-left: 0 !important;
+    margin-right: 0 !important;
+    margin-top: 54px !important;
+    border-radius: 0 !important;
+  }
+}
+
+/* Original CRM Description field enhancement. Scoped to explicit extension
+ * classes so it never applies unless the enhancer marks the live field. */
+
+/* Dual-class selector (specificity 0,2,0) beats any single-class SN rule.
+ * A stylesheet !important also beats an inline non-important assignment —
+ * ServiceNow's autoresize uses element.style.height = 'Xpx' (non-important). */
+.sncrm-original-description-flow.sncrm-original-description-field {
+  height: auto !important;
+  max-height: none !important;
+  max-block-size: none !important;
+  overflow: visible !important;
+}
+
+.sncrm-original-description-field {
+  position: relative;
+  width: 100%;
+}
+
+.sncrm-original-description-host {
+  --sncrm-border: #e5e7eb;
+  --sncrm-border-strong: #d1d5db;
+  --sncrm-accent: #2563eb;
+  --sncrm-accent-soft: #eff6ff;
+  display: block;
+  position: relative;
+  width: 100%;
+}
+
+.sncrm-original-description-host.sncrm-original-description-flow {
+  height: auto !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  max-height: none !important;
+  align-self: stretch !important;
+  contain: none !important;
+}
+
+.sncrm-original-description-field .now-textarea-field,
+.sncrm-original-description-field .now-textarea-field-copy,
+.sncrm-original-description-field .now-textarea-field-backdrop {
+  max-block-size: none !important;
+  max-height: none !important;
+}
+
+.sncrm-original-description-host textarea.sncrm-original-description-editor,
+.sncrm-original-description-host [contenteditable="true"].sncrm-original-description-editor,
+.sncrm-original-description-host [contenteditable="plaintext-only"].sncrm-original-description-editor,
+.sncrm-original-description-host [role="textbox"].sncrm-original-description-editor {
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  min-height: 120px;
+  padding: 16px 18px;
+  line-height: 1.65;
+  font-size: 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  tab-size: 2;
+  resize: none;
+}
+
+textarea.sncrm-original-description-editor,
+[contenteditable="true"].sncrm-original-description-editor,
+[contenteditable="plaintext-only"].sncrm-original-description-editor,
+[role="textbox"].sncrm-original-description-editor {
+  resize: none;
+}
+
+.sncrm-original-description-host:focus-within textarea.sncrm-original-description-editor,
+.sncrm-original-description-host:focus-within [contenteditable="true"].sncrm-original-description-editor,
+.sncrm-original-description-host:focus-within [contenteditable="plaintext-only"].sncrm-original-description-editor,
+.sncrm-original-description-host:focus-within [role="textbox"].sncrm-original-description-editor {
+  outline: 2px solid rgba(37, 99, 235, 0.22);
+  outline-offset: 0;
+}
+
+.sncrm-description-resize-row {
+  display: block;
+  width: 100%;
+  padding: 2px 0;
+  margin: 0;
+  background: transparent;
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+}
+
+.sncrm-description-resize-handle {
+  display: block;
+  width: 100%;
+  height: 10px;
+  cursor: ns-resize;
+  background: linear-gradient(180deg, transparent 0, rgba(15, 23, 42, 0.06) 50%, transparent 100%);
+  border-radius: 3px;
+  touch-action: none;
+  user-select: none;
+}
+
+.sncrm-description-resize-handle::after {
+  content: '';
+  display: block;
+  margin: 3px auto;
+  width: 44px;
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(15, 23, 42, 0.28);
+}
+
+.sncrm-description-resize-handle:hover,
+.sncrm-description-resize-handle.is-dragging {
+  background: rgba(37, 99, 235, 0.10);
+}
+
+.sncrm-description-resize-handle:focus-visible {
+  outline: 2px solid rgba(37, 99, 235, 0.55);
+  outline-offset: 1px;
+}
+
+/* Body — the actual card of content. Owns margins, bg, shadow, scroll. */
+#sncrm-overview-panel .sncrm-body {
+  /* margin: 54px 0 0 73px; */
+  margin: 65px 10px 0 83px;
+  padding: 14px 20px 10px;
+  background: var(--sncrm-bg);
+  border: 1px solid var(--sncrm-border);
+  /* border-radius: 12px; */
+  border-radius: 8px;
+  box-shadow: var(--sncrm-shadow);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  pointer-events: auto;
+  contain: layout paint;
+  /* max-height applied inline by attachResize() / applyHeightMode() */
+}
+
+#sncrm-overview-panel.is-collapsed .sncrm-body { display: none; }
+
+/* Full-height: body fills the viewport below the CRM top bar.
+ * Collapsed overrides this so the CRM is still reachable. */
+#sncrm-overview-panel.is-full-height:not(.is-collapsed) .sncrm-body {
+  max-height: calc(100vh - 54px) !important;
+  height: calc(100vh - 54px);
+}
+
+#sncrm-overview-panel .sncrm-cards {
+  --sncrm-columns: 3;
+  display: grid;
+  grid-template-columns: repeat(var(--sncrm-columns), minmax(0, 1fr));
+  gap: 10px 12px;
+  contain: layout;
+}
+@media (max-width: 720px) {
+  #sncrm-overview-panel .sncrm-cards { grid-template-columns: 1fr; }
+}
+
+#sncrm-overview-panel .sncrm-card {
+  padding: 10px 12px;
+  background: var(--sncrm-bg-soft);
+  border: 1px solid var(--sncrm-border);
+  border-radius: 8px;
+  min-width: 0;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+#sncrm-overview-panel .sncrm-card:hover {
+  border-color: var(--sncrm-border-strong);
+  background: #f6f8fb;
+}
+#sncrm-overview-panel .sncrm-card-label {
+  color: var(--sncrm-muted);
+  font-weight: 600;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+#sncrm-overview-panel .sncrm-card-value {
+  color: var(--sncrm-fg);
+  font-weight: 600;
+  font-size: 13.5px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#sncrm-overview-panel .sncrm-card-value.is-empty {
+  color: var(--sncrm-empty);
+  font-style: italic;
+  font-weight: 400;
+}
+#sncrm-overview-panel .sncrm-date-text { font-variant-numeric: tabular-nums; }
+#sncrm-overview-panel .sncrm-num { font-variant-numeric: tabular-nums; }
+#sncrm-overview-panel .sncrm-card-value.is-tags {
+  gap: 6px;
+}
+
+#sncrm-overview-panel .sncrm-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #eef1f4;
+  border: 1px solid #dde3e8;
+  color: #4b5563;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* Link cards (e.g. Bid Room). Ellipsis-truncate long URLs; full URL on hover
+ * via title attribute set in ui.js. */
+#sncrm-overview-panel .sncrm-link {
+  color: var(--sncrm-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+  display: inline-block;
+  font-weight: 500;
+}
+#sncrm-overview-panel .sncrm-link:hover { color: #1d4ed8; }
+
+#sncrm-overview-panel .sncrm-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+#sncrm-overview-panel .sncrm-badge-red    { color: var(--sncrm-red);    background: var(--sncrm-red-soft);    border-color: #fecaca; }
+#sncrm-overview-panel .sncrm-badge-orange { color: var(--sncrm-orange); background: var(--sncrm-orange-soft); border-color: #fde68a; }
+#sncrm-overview-panel .sncrm-badge-green  { color: var(--sncrm-green);  background: var(--sncrm-green-soft);  border-color: #a7f3d0; }
+#sncrm-overview-panel .sncrm-badge-neutral{ color: var(--sncrm-muted);  background: #f3f4f6;                  border-color: var(--sncrm-border); }
+
+#sncrm-overview-panel .sncrm-skel-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) 1fr;
+  gap: 6px 16px;
+  margin-bottom: 8px;
+}
+#sncrm-overview-panel .sncrm-skel {
+  position: relative;
+  height: 12px;
+  border-radius: 4px;
+  background: #eef1f5;
+  overflow: hidden;
+}
+#sncrm-overview-panel .sncrm-skel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.18) 30%, rgba(255, 255, 255, 0.58) 50%, rgba(255, 255, 255, 0.18) 70%, transparent 100%);
+  transform: translate3d(-140%, 0, 0);
+  animation: sncrm-shimmer 1.2s linear infinite;
+}
+@keyframes sncrm-shimmer {
+  0% { transform: translate3d(-140%, 0, 0); }
+  100% { transform: translate3d(140%, 0, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #sncrm-overview-panel .sncrm-skel::after {
+    animation: none;
+    transform: none;
+  }
+}
+
+#sncrm-overview-panel .sncrm-empty {
+  color: var(--sncrm-muted);
+  font-style: italic;
+}
+
+#sncrm-overview-panel .sncrm-empty-detail {
+  color: var(--sncrm-muted);
+  margin-top: 6px;
+}
+
+#sncrm-overview-panel .sncrm-spacer {
+  min-height: 52px;
+  visibility: hidden;
+}
+
+#sncrm-overview-panel .sncrm-md {
+  grid-column: 1 / -1;
+  padding: 12px 14px;
+  background: var(--sncrm-bg-soft);
+  border: 1px solid var(--sncrm-border);
+  border-radius: 8px;
+  min-width: 0;
+}
+#sncrm-overview-panel .sncrm-md-label {
+  color: var(--sncrm-muted);
+  font-weight: 700;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--sncrm-border);
+}
+#sncrm-overview-panel .sncrm-md-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--sncrm-fg);
+}
+#sncrm-overview-panel .sncrm-md-description .sncrm-md-body {
+  font-size: 14.5px;
+  line-height: 1.65;
+  max-height: 520px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+/* Auto-height: fit content, no internal scrollbar. Users opt in via the
+ * "Fit description to content" setting when they prefer to scroll the
+ * panel as a whole rather than the field in isolation. */
+#sncrm-overview-panel .sncrm-md.is-auto-height .sncrm-md-body {
+  max-height: none;
+  overflow: visible;
+}
+#sncrm-overview-panel .sncrm-md-body.is-empty {
+  color: var(--sncrm-empty);
+  font-style: italic;
+  font-size: 13px;
+}
+#sncrm-overview-panel .sncrm-md-body p {
+  margin: 0 0 0.7em;
+}
+#sncrm-overview-panel .sncrm-md-body p:last-child {
+  margin-bottom: 0;
+}
+#sncrm-overview-panel .sncrm-md-body h1,
+#sncrm-overview-panel .sncrm-md-body h2,
+#sncrm-overview-panel .sncrm-md-body h3,
+#sncrm-overview-panel .sncrm-md-body h4,
+#sncrm-overview-panel .sncrm-md-body h5,
+#sncrm-overview-panel .sncrm-md-body h6 {
+  margin: 1em 0 0.4em;
+  line-height: 1.3;
+  font-weight: 600;
+}
+#sncrm-overview-panel .sncrm-md-body h1 { font-size: 1.35em; }
+#sncrm-overview-panel .sncrm-md-body h2 { font-size: 1.2em; }
+#sncrm-overview-panel .sncrm-md-body h3 { font-size: 1.08em; }
+#sncrm-overview-panel .sncrm-md-body h4,
+#sncrm-overview-panel .sncrm-md-body h5,
+#sncrm-overview-panel .sncrm-md-body h6 { font-size: 1em; }
+#sncrm-overview-panel .sncrm-md-body ul,
+#sncrm-overview-panel .sncrm-md-body ol {
+  margin: 0 0 0.7em;
+  padding-left: 1.4em;
+}
+#sncrm-overview-panel .sncrm-md-body li { margin: 0.1em 0; }
+#sncrm-overview-panel .sncrm-md-body blockquote {
+  margin: 0.4em 0;
+  padding: 6px 12px;
+  border-left: 3px solid var(--sncrm-accent);
+  background: var(--sncrm-accent-soft);
+  color: var(--sncrm-fg);
+  border-radius: 0 6px 6px 0;
+}
+#sncrm-overview-panel .sncrm-md-body code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.92em;
+  background: #f3f4f6;
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+#sncrm-overview-panel .sncrm-md-body pre {
+  background: #f3f4f6;
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.5em 0 0.8em;
+  font-size: 0.88em;
+}
+#sncrm-overview-panel .sncrm-md-body pre code {
+  background: transparent;
+  padding: 0;
+}
+#sncrm-overview-panel .sncrm-md-body a {
+  color: var(--sncrm-accent);
+  text-decoration: underline;
+}
+#sncrm-overview-panel .sncrm-md-body hr {
+  border: 0;
+  border-top: 1px solid var(--sncrm-border);
+  margin: 0.8em 0;
+}
+
+#sncrm-overview-panel .sncrm-footer {
+  padding: 6px 14px 10px;
+  color: var(--sncrm-muted);
+  font-size: 11px;
+}

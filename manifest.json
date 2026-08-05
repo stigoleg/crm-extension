@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "ServiceNow CRM Opportunity Overview",
+  "description": "Injects a configurable opportunity overview panel on ServiceNow CRM opportunity record pages.",
+  "version": "1.1.0",
+  "minimum_chrome_version": "116",
+  "action": {
+    "default_title": "ServiceNow CRM Overview",
+    "default_popup": "src/popup/popup.html"
+  },
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+  "permissions": ["storage", "tabs", "scripting", "webNavigation"],
+  "host_permissions": [
+    "https://*/x/ssasi/crm/record/x_ssasi_crm_opportunity/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*/x/ssasi/crm/record/x_ssasi_crm_opportunity/*"
+      ],
+      "js": ["src/content/content-script.bundle.js"],
+      "css": ["src/content/styles.css"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ]
+}

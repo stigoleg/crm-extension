@@ -1,0 +1,384 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ServiceNow CRM Overview — Settings</title>
+  <style>
+    :root {
+      --fg: #111827; --muted: #6b7280; --border: #e5e7eb; --border-strong: #d1d5db;
+      --accent: #2563eb; --accent-hover: #1d4ed8; --accent-soft: #eff6ff;
+      --danger: #dc2626; --danger-hover: #b91c1c; --danger-soft: #fef2f2;
+      --bg: #fff; --bg-soft: #fafbfc;
+    }
+    html, body { margin: 0; padding: 0; background: #f5f7fa; color: var(--fg); }
+    body { font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; -webkit-font-smoothing: antialiased; }
+    .wrap { max-width: 860px; margin: 32px auto; padding: 0 20px; }
+    h1 { margin: 0 0 4px; font-size: 22px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); margin-bottom: 24px; }
+    .card {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 12px;
+      padding: 20px 22px; margin-bottom: 16px;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    }
+    .card.is-detected {
+      border-color: #fca5a5;
+      box-shadow: 0 1px 2px rgba(220, 38, 38, 0.08);
+    }
+    .card.is-detected h2 { color: #991b1b; }
+    .card.is-detected .card-sub { color: #991b1b; }
+    .card h2 { margin: 0 0 14px; font-size: 15px; font-weight: 600; }
+    .card h2 .hint { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 8px; }
+    .card-sub { margin: -6px 0 14px; color: var(--muted); font-size: 12px; }
+    .row { display: flex; align-items: center; gap: 10px; margin: 8px 0; }
+    .row-setting { align-items: flex-start; gap: 12px; padding: 8px 0; }
+    .row-setting input[type="checkbox"] { margin-top: 2px; }
+    .row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .row-title { font-weight: 600; color: var(--fg); }
+    .row-help { color: var(--muted); font-size: 12px; }
+    .inline { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+
+    /* Button system
+     * btn       = base (neutral / ghost outline)
+     * btn-primary  = filled accent
+     * btn-danger   = destructive action (Reset to defaults)
+     * btn-group    = horizontal cluster with consistent spacing */
+    .btn-group { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+    .btn-group .spacer { flex: 1; }
+    .btn {
+      appearance: none;
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 6px;
+      padding: 7px 14px;
+      font: 500 13px/1.2 inherit;
+      color: var(--fg);
+      background: var(--bg);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease, box-shadow 120ms ease;
+    }
+    .btn:hover { background: var(--bg-soft); border-color: #9ca3af; }
+    .btn:active { background: #f3f4f6; transform: translateY(0.5px); }
+    .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; background: var(--bg-soft); }
+    .btn-primary {
+      color: #fff; background: var(--accent); border-color: var(--accent);
+    }
+    .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+    .btn-primary:active { background: #1e40af; border-color: #1e40af; }
+    .btn-danger {
+      color: var(--danger); border-color: #fecaca; background: var(--bg);
+    }
+    .btn-danger:hover { background: var(--danger-soft); border-color: #fca5a5; color: var(--danger-hover); }
+    .btn-danger:active { background: #fee2e2; }
+    .group { margin-top: 14px; }
+    .group:first-child { margin-top: 8px; }
+    .group-title {
+      font-size: 11px; font-weight: 600; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 6px;
+    }
+    .fields { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 4px 16px; }
+    .hint { color: var(--muted); font-size: 12px; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 12px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 1px 5px;
+      color: #374151;
+    }
+
+    /* Drag-and-drop arrangement grid */
+    #layoutGrid {
+      --cols: 3;
+      display: grid;
+      grid-template-columns: repeat(var(--cols), minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 10px;
+      min-height: 72px;
+      padding: 10px;
+      background: #fafbfc;
+      border: 1px dashed var(--border);
+      border-radius: 8px;
+    }
+    .chip {
+      position: relative;
+      display: flex; align-items: stretch; gap: 10px;
+      padding: 10px 12px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      cursor: grab;
+      user-select: none;
+      font-size: 13px;
+      min-width: 0;
+      min-height: 72px;
+      transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
+    }
+    .chip:active { cursor: grabbing; }
+    .chip:hover { border-color: #c5ced6; box-shadow: 0 3px 10px rgba(15, 23, 42, 0.06); }
+    .chip.dragging { opacity: 0.45; box-shadow: none; }
+    .chip.drop-before::before,
+    .chip.drop-after::after {
+      content: '';
+      position: absolute;
+      left: -5px;
+      right: -5px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--accent);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+    .chip.drop-before::before { top: -7px; }
+    .chip.drop-after::after { bottom: -7px; }
+    .chip.is-wide {
+      background: linear-gradient(180deg, #fff, var(--bg-soft, #fafbfc));
+    }
+    .chip.is-empty-slot {
+      border-style: dashed;
+      background: linear-gradient(180deg, #fcfcfd, #f7f9fb);
+      color: var(--muted);
+    }
+    .chip .handle {
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 18px;
+      cursor: grab;
+      flex: 0 0 auto;
+    }
+    .chip .chip-main {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      justify-content: center;
+    }
+    .chip .chip-topline {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .chip .chip-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .chip .chip-tag { font-size: 10px; color: var(--accent); background: var(--accent-soft); padding: 2px 7px; border-radius: 999px; }
+    .chip .chip-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      color: var(--muted);
+      font-size: 11px;
+    }
+    .chip .chip-span {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: #f3f4f6;
+      border: 1px solid #e5e7eb;
+      color: #4b5563;
+      font-weight: 600;
+    }
+    .chip .chip-note {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chip .resize {
+      align-self: stretch;
+      width: 18px;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      cursor: ew-resize;
+      border-radius: 6px;
+      font-size: 13px;
+      line-height: 1;
+      padding: 0;
+      flex: 0 0 auto;
+      touch-action: none;
+    }
+    .chip .resize:hover,
+    .chip .resize:focus-visible {
+      background: var(--bg-soft);
+      color: var(--accent);
+      outline: none;
+    }
+    .chip .remove {
+      border: 0; background: transparent; cursor: pointer; color: var(--muted);
+      font-size: 16px; line-height: 1; padding: 0 4px; border-radius: 4px;
+      align-self: flex-start;
+    }
+    .chip .remove:hover { color: #dc2626; }
+    .layout-tail {
+      grid-column: 1 / -1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 46px;
+      border: 1px dashed var(--border-strong);
+      border-radius: 10px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.7);
+      font-size: 12px;
+      transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+    }
+    .layout-tail.is-active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .segment { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 8px; overflow: hidden; background: var(--bg); }
+    .segment button {
+      border: 0; background: transparent; padding: 6px 14px; cursor: pointer;
+      font: 500 13px/1.2 inherit; color: var(--fg);
+      transition: background 120ms ease, color 120ms ease;
+    }
+    .segment button:hover:not(.active) { background: var(--bg-soft); }
+    .segment button.active { background: var(--accent); color: #fff; }
+    .segment button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    .segment button + button { border-left: 1px solid var(--border); }
+
+    input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+    label.row { cursor: pointer; padding: 2px 0; }
+    label.row:hover span { color: var(--fg); }
+
+    .save-indicator { color: #059669; font-size: 12px; min-height: 16px; }
+    .save-indicator.saving { color: var(--muted); }
+
+    .empty-state {
+      color: var(--muted); font-style: italic; padding: 16px; text-align: center;
+      grid-column: 1 / -1;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>ServiceNow CRM Overview</h1>
+    <div class="sub">Settings apply to every supported opportunity page. Changes save automatically.</div>
+
+    <section class="card">
+      <h2>Layout <span class="hint">drag to reorder · drag the right edge to span more columns · add spacer cells</span></h2>
+      <div class="inline">
+        <span class="hint">Columns:</span>
+        <div class="segment" id="columnsSegment" role="tablist" aria-label="Panel columns">
+          <button type="button" data-cols="2">2</button>
+          <button type="button" data-cols="3">3</button>
+          <button type="button" data-cols="4">4</button>
+        </div>
+        <button type="button" class="btn" id="addEmptyCell">Add empty cell</button>
+        <span class="save-indicator" id="saveIndicator" aria-live="polite"></span>
+      </div>
+      <div id="layoutGrid" aria-label="Panel field arrangement"></div>
+    </section>
+
+    <section class="card">
+      <h2>Overview Panel</h2>
+      <div class="card-sub">Controls the extension panel that appears above supported opportunity pages.</div>
+      <label class="row row-setting">
+        <input type="checkbox" id="enabled">
+        <span class="row-body">
+          <span class="row-title">Enable overview panel</span>
+          <span class="row-help">Show the extension panel on supported ServiceNow opportunity pages.</span>
+        </span>
+      </label>
+      <label class="row row-setting">
+        <input type="checkbox" id="startExpanded">
+        <span class="row-body">
+          <span class="row-title">Start overview panel expanded</span>
+          <span class="row-help">Open the page with the extension panel already expanded instead of collapsed.</span>
+        </span>
+      </label>
+      <label class="row row-setting">
+        <input type="checkbox" id="autoExpandSections">
+        <span class="row-body">
+          <span class="row-title">Auto-expand ServiceNow form sections</span>
+          <span class="row-help">Expand the native opportunity form sections so the extension can read values consistently.</span>
+        </span>
+      </label>
+      <label class="row row-setting">
+        <input type="checkbox" id="panelFullHeight">
+        <span class="row-body">
+          <span class="row-title">Use full-height overview panel</span>
+          <span class="row-help">Make the extension panel fill the page height. Turn this off if you want to drag the panel’s bottom edge to resize it.</span>
+        </span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Extension Panel Description Card</h2>
+      <div class="card-sub">Applies only to the Description card inside the extension panel, not the native ServiceNow Description field.</div>
+      <label class="row row-setting">
+        <input type="checkbox" id="descriptionAutoHeight">
+        <span class="row-body">
+          <span class="row-title">Fit extension panel Description card to content</span>
+          <span class="row-help">Remove the Description card’s internal scrollbar so the extension panel scrolls instead.</span>
+        </span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Native ServiceNow Description Field</h2>
+      <div class="card-sub">Controls the original Description textarea on the ServiceNow page itself.</div>
+      <label class="row row-setting">
+        <input type="checkbox" id="enhanceOriginalDescription">
+        <span class="row-body">
+          <span class="row-title">Enhance native Description field styling</span>
+          <span class="row-help">Apply the extension’s spacing and typography treatment to the original ServiceNow Description field. Resize using the handle below the field.</span>
+        </span>
+      </label>
+      <label class="row row-setting">
+        <input type="checkbox" id="largeOriginalDescription">
+        <span class="row-body">
+          <span class="row-title">Make native Description field larger by default</span>
+          <span class="row-help">Increase the starting height of the original ServiceNow Description field. Resize using the handle below the field — the height is remembered across refreshes.</span>
+        </span>
+      </label>
+    </section>
+
+    <section class="card">
+      <h2>Developer</h2>
+      <label class="row row-setting">
+        <input type="checkbox" id="debug">
+        <span class="row-body">
+          <span class="row-title">Debug logging</span>
+          <span class="row-help">Write extension diagnostics to the browser developer console.</span>
+        </span>
+      </label>
+    </section>
+
+    <section class="card is-detected" id="detectedFieldsCard" hidden>
+      <h2>Detected Field Changes</h2>
+      <div class="card-sub">Visible only when the live ServiceNow form exposes a new field or a changed underlying field name that the extension does not know yet. Use the section heading and ServiceNow field name below when adding it later to <code>src/content/field-registry.js</code>.</div>
+      <div id="detectedFields"></div>
+    </section>
+
+    <section class="card">
+      <h2>Fields <span class="hint">check to add to the layout above</span></h2>
+      <div id="fields"></div>
+      <div class="btn-group">
+        <button type="button" class="btn" id="selectAll">Select all</button>
+        <button type="button" class="btn" id="selectNone">Select none</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn btn-danger" id="resetDefaults">Reset to defaults</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="../shared/constants.js"></script>
+  <script src="../shared/log.js"></script>
+  <script src="../shared/url.js"></script>
+  <script src="../shared/storage.js"></script>
+  <script src="../shared/discovery-storage.js"></script>
+  <script src="../shared/messages.js"></script>
+  <script src="../content/field-registry.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

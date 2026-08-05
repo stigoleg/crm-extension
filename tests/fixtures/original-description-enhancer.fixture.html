@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Original Description Enhancer Fixture</title>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+
+      body {
+        margin: 0;
+        padding: 32px;
+        background: #f3f4f6;
+        color: #111827;
+        font: 14px/1.5 Arial, sans-serif;
+      }
+
+      #scope {
+        max-width: 760px;
+      }
+
+      .now-label-value-pair {
+        display: block;
+        padding: 20px;
+        background: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 10px;
+        box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+      }
+
+      .sn-form-label {
+        display: block;
+        margin-bottom: 10px;
+        font-weight: 700;
+      }
+
+      .sn-form-value {
+        display: block;
+        width: 100%;
+      }
+
+      .now-textarea-wrapper {
+        display: grid;
+        grid-template-columns: 1fr;
+        width: 100%;
+        overflow: hidden;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        background: #ffffff;
+      }
+
+      .now-textarea-field,
+      .now-textarea-field-copy,
+      .now-textarea-field-backdrop {
+        grid-column: 1;
+        grid-row: 1;
+        width: 100%;
+        box-sizing: border-box;
+        font: 14px/1.5 Arial, sans-serif;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+
+      .now-textarea-field {
+        min-height: 120px;
+        max-block-size: 16rem;
+        padding: 12px 14px;
+        border: 0;
+        outline: 0;
+        background: transparent;
+        resize: none;
+        overflow: auto;
+      }
+
+      .now-textarea-field-copy {
+        visibility: hidden;
+        max-block-size: 16rem;
+        padding: 12px 14px;
+      }
+
+      .now-textarea-field-backdrop {
+        max-block-size: 16rem;
+        opacity: 0;
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <section id="scope">
+      <div class="now-label-value-pair" id="field">
+        <div class="sn-form-label">Description</div>
+        <div class="sn-form-value" id="value">
+          <div class="now-textarea-wrapper is-autoresize" id="wrapper">
+            <textarea
+              id="desc-editor"
+              name="description"
+              class="now-textarea-field -initial -resize-vertical"
+              autocomplete="off"
+              aria-label="Description"
+            >INTERNFRIST 15.04 KL16
+
+Omfang: Kunde ønsker 1 konsulent i 50% rolle
+Avtaleperiode: Oppstart 01.04.2026, varighet til 31.12.2026
+Sted: Primært ønsket Oslo, hos kunden. Trondheim kan vurderes.</textarea>
+            <div id="copy" class="now-textarea-field-copy"></div>
+            <div id="backdrop" class="now-textarea-field-backdrop"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <script>
+      (function () {
+        const editor = document.getElementById('desc-editor');
+        const copy = document.getElementById('copy');
+        const backdrop = document.getElementById('backdrop');
+        const sync = () => {
+          copy.textContent = editor.value;
+          copy.setAttribute('data-replicated-value', editor.value);
+          backdrop.textContent = editor.value;
+        };
+        sync();
+        editor.addEventListener('input', sync);
+      })();
+    </script>
+  </body>
+</html>

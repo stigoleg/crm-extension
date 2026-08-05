@@ -1,0 +1,14 @@
+{
+  "name": "servicenow-crm-opportunity-overview",
+  "private": true,
+  "scripts": {
+    "build:content": "node scripts/build-content-bundle.js",
+    "test": "node tests/markdown.test.js && node tests/navigation.test.js && node tests/navigation-scope.test.js && node tests/storage.test.js && node tests/discovery-storage.test.js && node tests/field-discovery.test.js && node tests/options-detected-fields.test.js && node tests/service-worker.test.js && node tests/ui-render.test.js && node tests/original-description-enhancer.test.js",
+    "test:browser": "node tests/original-description-enhancer.browser.test.js",
+    "test:all": "npm test && npm run test:browser"
+  },
+  "devDependencies": {
+    "jsdom": "^24.1.3",
+    "playwright": "^1.55.0"
+  }
+}
