@@ -35,7 +35,7 @@
   }
 
   function normalizeReason(value) {
-    return value === 'name-change' ? 'name-change' : 'new-field';
+    return value === 'known' ? 'known' : (value === 'name-change' ? 'name-change' : 'new-field');
   }
 
   function detectedKeyFor(serviceNowName) {
@@ -72,13 +72,26 @@
     ) {
       return null;
     }
+    const reason = normalizeReason(item.reason);
     const label = normalizeLabel(
       item.label,
       NS.fieldRegistry && typeof NS.fieldRegistry.friendlyDetectedLabel === 'function'
         ? NS.fieldRegistry.friendlyDetectedLabel(serviceNowName)
         : serviceNowName
     );
-    const key = normalizeName(item.key) || detectedKeyFor(serviceNowName);
+    let key = normalizeName(item.key);
+    if (!key) {
+      if (
+        reason === 'known' &&
+        NS.fieldRegistry &&
+        typeof NS.fieldRegistry.hasStaticField === 'function' &&
+        NS.fieldRegistry.hasStaticField(serviceNowName)
+      ) {
+        key = serviceNowName;
+      } else {
+        key = detectedKeyFor(serviceNowName);
+      }
+    }
     const firstSeenAt = Number.isFinite(item.firstSeenAt) ? Math.round(item.firstSeenAt) : now;
     const lastSeenAt = Number.isFinite(item.lastSeenAt) ? Math.round(item.lastSeenAt) : now;
     const normalized = {
@@ -87,7 +100,7 @@
       label,
       group: normalizeGroup(item.group),
       renderAs: normalizeRenderAs(item.renderAs),
-      reason: normalizeReason(item.reason),
+      reason,
       firstSeenAt: Math.min(firstSeenAt, lastSeenAt),
       lastSeenAt: Math.max(firstSeenAt, lastSeenAt)
     };

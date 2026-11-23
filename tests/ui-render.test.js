@@ -52,6 +52,7 @@ function makeDom() {
 function makeUiHarness() {
   const dom = makeDom();
   const { window } = dom;
+  const clipboardCalls = [];
   window.SNCRM = {
     log: {
       make() {
@@ -74,12 +75,21 @@ function makeUiHarness() {
     },
     markdown: {
       render(value) { return String(value || ''); }
+    },
+    storage: {
+      get() { return Promise.resolve({ descriptionCopyFormat: 'markdown' }); }
+    },
+    clipboard: {
+      copyDescription(text, format) {
+        clipboardCalls.push({ text, format });
+        return Promise.resolve(true);
+      }
     }
   };
   window.open = () => null;
   loadScript(window, 'src/content/field-registry.js');
   loadScript(window, 'src/content/ui.js');
-  return { dom, window, ui: window.SNCRM.ui };
+  return { dom, window, ui: window.SNCRM.ui, clipboardCalls };
 }
 
 function setViewportWidth(window, width) {
@@ -441,6 +451,56 @@ test('panel styles keep containment while avoiding expensive permanent layer pro
     /#sncrm-overview-panel \.sncrm-cards\s*\{[\s\S]*?contain:\s*layout;/.test(styles),
     'expected the card grid to isolate layout reflows inside the panel'
   );
+});
+
+test('description markdown block renders a copy button that copies the raw source', async () => {
+  const { dom, window, ui, clipboardCalls } = makeUiHarness();
+  const host = window.document.createElement('div');
+  ui.renderValues(host, ['description'], {
+    description: {
+      key: 'description',
+      found: true,
+      value: '**bold** text',
+      source: 'test'
+    }
+  }, {
+    columns: 3,
+    layout: [{ type: 'field', key: 'description', span: 3 }],
+    descriptionAutoHeight: false
+  });
+
+  const block = host.querySelector('.sncrm-md-description');
+  assert(block, 'expected a rendered description markdown block');
+  const button = block.querySelector('.sncrm-md-copy');
+  assert(button, 'expected a copy button in the description header');
+  assertEqual(button.getAttribute('aria-label'), 'Copy Description', 'expected an accessible label');
+
+  button.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assertEqual(clipboardCalls.length, 1, 'expected exactly one clipboard write');
+  assertEqual(clipboardCalls[0].text, '**bold** text', 'expected the raw markdown source to be copied');
+  assertEqual(clipboardCalls[0].format, 'markdown', 'expected the default copy format');
+  assertEqual(button.textContent, 'Copied', 'expected the button to confirm the copy');
+
+  ui.renderValues(host, ['description'], {
+    description: {
+      key: 'description',
+      found: true,
+      value: '**new** text',
+      source: 'test'
+    }
+  }, {
+    columns: 3,
+    layout: [{ type: 'field', key: 'description', span: 3 }],
+    descriptionAutoHeight: false
+  });
+
+  button.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assertEqual(clipboardCalls.length, 2, 'expected a second clipboard write');
+  assertEqual(clipboardCalls[1].text, '**new** text', 'expected the re-rendered value to be copied');
+
+  dom.window.close();
 });
 
 console.log(`\n${passed} passed, ${failed} failed`);

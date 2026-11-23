@@ -139,6 +139,32 @@ async function run() {
     dom.window.close();
   });
 
+  test('discoverFields keeps the curated group for known fields when no section header is present', async () => {
+    const dom = makeDom(`
+      <body>
+        <div id="scope">
+          <div class="field">
+            <label for="account">Account</label>
+            <input id="account" name="account" value="Acme">
+          </div>
+        </div>
+      </body>
+    `, 'https://thehub.soprasteria.com/x/ssasi/crm/record/x_ssasi_crm_opportunity/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    const { window } = dom;
+
+    loadExtractorHarness(window);
+
+    const { discoverFields } = window.SNCRM.extractors;
+    const result = discoverFields(window.document.getElementById('scope'));
+
+    assertEqual(result.discoveries.length, 1, 'expected the known account field to be surfaced');
+    assertEqual(result.discoveries[0].reason, 'known', 'expected an unchanged known name to register as a known field');
+    assertEqual(result.discoveries[0].key, 'account', 'expected known fields to keep their static key');
+    assertEqual(result.discoveries[0].group, 'Opportunity Information', 'expected known fields to fall back to the curated group when no section is detected');
+
+    dom.window.close();
+  });
+
   test('discoverFields classifies changed underlying field names and ignores label-only renames', async () => {
     const dom = makeDom(`
       <body>
@@ -162,12 +188,15 @@ async function run() {
     const { discoverFields } = window.SNCRM.extractors;
     const result = discoverFields(window.document.getElementById('scope'));
 
-    assertEqual(result.discoveries.length, 1, 'expected only the changed underlying field name to be surfaced');
-    assertEqual(result.discoveries[0].serviceNowName, 'legacy_account', 'expected the unknown ServiceNow name to be reported');
-    assertEqual(result.discoveries[0].group, 'Opportunity Information', 'expected name-changed fields to stay grouped under the detected ServiceNow section');
-    assertEqual(result.discoveries[0].reason, 'name-change', 'expected matching a known static label to classify as a name change');
-    assertEqual(result.discoveries[0].matchedRegistryKey, 'account', 'expected name changes to point back to the matched static field');
-    assert(result.resolvedServiceNowNames.includes('account'), 'expected known field names to be marked as resolved even when their labels changed');
+    const byName = Object.fromEntries(result.discoveries.map((field) => [field.serviceNowName, field]));
+    assertEqual(result.discoveries.length, 2, 'expected both the known field and the renamed field to be surfaced');
+    assertEqual(byName.account.reason, 'known', 'expected an unchanged known name to register as a known field');
+    assertEqual(byName.account.key, 'account', 'expected known fields to keep their static key');
+    assertEqual(byName.account.group, 'Opportunity Information', 'expected known fields to adopt the detected ServiceNow section');
+    assertEqual(byName.legacy_account.serviceNowName, 'legacy_account', 'expected the unknown ServiceNow name to be reported');
+    assertEqual(byName.legacy_account.reason, 'name-change', 'expected matching a known static label to classify as a name change');
+    assertEqual(byName.legacy_account.matchedRegistryKey, 'account', 'expected name changes to point back to the matched static field');
+    assert(!result.resolvedServiceNowNames.includes('account'), 'expected known fields to be reported as discoveries, not resolved skip-listed');
 
     dom.window.close();
   });
@@ -192,8 +221,10 @@ async function run() {
     const { discoverFields } = window.SNCRM.extractors;
     const result = discoverFields(window.document.getElementById('scope'));
 
-    assertEqual(result.discoveries.length, 0, 'expected internal *_input controls to be ignored when the base field already exists');
-    assert(result.resolvedServiceNowNames.includes('advisory_bid_manager'), 'expected the base field itself to remain resolved as known');
+    const byName = Object.fromEntries(result.discoveries.map((field) => [field.serviceNowName, field]));
+    assertEqual(result.discoveries.length, 1, 'expected only the base known field to be surfaced, not its *_input companion');
+    assertEqual(byName.advisory_bid_manager.reason, 'known', 'expected the base field to register as known');
+    assert(!result.resolvedServiceNowNames.includes('advisory_bid_manager'), 'expected the base field to be a discovery, not resolved');
     assert(result.resolvedServiceNowNames.includes('advisory_bid_manager_input'), 'expected ignored *_input companions to be marked resolved so stale local discoveries are cleaned up');
 
     dom.window.close();
@@ -228,7 +259,10 @@ async function run() {
     const { discoverFields } = window.SNCRM.extractors;
     const result = discoverFields(window.document.getElementById('scope'));
 
-    assertEqual(result.discoveries.length, 0, 'expected internal -date companions and bare _input names to be ignored');
+    const byName = Object.fromEntries(result.discoveries.map((field) => [field.serviceNowName, field]));
+    assertEqual(result.discoveries.length, 2, 'expected only the base known date fields to be surfaced');
+    assertEqual(byName.due_date.reason, 'known', 'expected due_date to register as a known field');
+    assertEqual(byName.close_date.reason, 'known', 'expected close_date to register as a known field');
     assert(result.resolvedServiceNowNames.includes('due_date-date'), 'expected ignored date companions to be marked resolved so stale local discoveries are cleaned up');
     assert(result.resolvedServiceNowNames.includes('close_date-date'), 'expected ignored date companions to be marked resolved so stale local discoveries are cleaned up');
     assert(result.resolvedServiceNowNames.includes('_input'), 'expected bare _input names to be marked resolved so stale local discoveries are cleaned up');
@@ -259,7 +293,11 @@ async function run() {
     const { discoverFields } = window.SNCRM.extractors;
     const result = discoverFields(window.document.getElementById('scope'));
 
-    assertEqual(result.discoveries.length, 0, 'expected known estimate fields to stop appearing as missing once added to the registry');
+    const byName = Object.fromEntries(result.discoveries.map((field) => [field.serviceNowName, field]));
+    assertEqual(result.discoveries.length, 1, 'expected the known estimate field to be surfaced, not added as a new field');
+    assertEqual(byName.estimated_value_sopra.reason, 'known', 'expected the known estimate field to register as known');
+    assertEqual(byName.estimated_value_sopra.group, 'Estimates', 'expected known fields to adopt the live ServiceNow section heading over the curated group');
+    assertEqual(byName.estimated_value_sopra.label, 'Estimated Value Sopra', 'expected known fields to keep their curated label');
 
     dom.window.close();
   });

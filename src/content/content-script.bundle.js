@@ -177,9 +177,13 @@
     defaultCollapsed: false,
     columns: DEFAULT_COLUMNS,
     autoExpandSections: true,
-    enhanceOriginalDescription: false,
-    largeOriginalDescription: false,
+    enhanceOriginalDescription: true,
+    largeOriginalDescription: true,
     originalDescriptionHeight: null,
+    /* Format used by the copy button on the native Description field and the
+     * panel's Description card: 'markdown' copies the raw source, 'rich'
+     * writes rendered HTML (with a plain-text fallback in the same write). */
+    descriptionCopyFormat: 'markdown',
     /* Banner height as a percentage of viewport height. User-adjustable via
      * the drag handle on the bottom edge of the panel. Clamped to [15, 90]. */
     panelHeightPercent: 50,
@@ -281,6 +285,9 @@
     }
     if (typeof raw.originalDescriptionHeight === 'number' && Number.isFinite(raw.originalDescriptionHeight)) {
       out.originalDescriptionHeight = Math.max(120, Math.round(raw.originalDescriptionHeight));
+    }
+    if (raw.descriptionCopyFormat === 'markdown' || raw.descriptionCopyFormat === 'rich') {
+      out.descriptionCopyFormat = raw.descriptionCopyFormat;
     }
     if (typeof raw.panelHeightPercent === 'number' && Number.isFinite(raw.panelHeightPercent)) {
       out.panelHeightPercent = Math.max(15, Math.min(90, Math.round(raw.panelHeightPercent)));
@@ -421,7 +428,7 @@
   }
 
   function normalizeReason(value) {
-    return value === 'name-change' ? 'name-change' : 'new-field';
+    return value === 'known' ? 'known' : (value === 'name-change' ? 'name-change' : 'new-field');
   }
 
   function detectedKeyFor(serviceNowName) {
@@ -458,13 +465,26 @@
     ) {
       return null;
     }
+    const reason = normalizeReason(item.reason);
     const label = normalizeLabel(
       item.label,
       NS.fieldRegistry && typeof NS.fieldRegistry.friendlyDetectedLabel === 'function'
         ? NS.fieldRegistry.friendlyDetectedLabel(serviceNowName)
         : serviceNowName
     );
-    const key = normalizeName(item.key) || detectedKeyFor(serviceNowName);
+    let key = normalizeName(item.key);
+    if (!key) {
+      if (
+        reason === 'known' &&
+        NS.fieldRegistry &&
+        typeof NS.fieldRegistry.hasStaticField === 'function' &&
+        NS.fieldRegistry.hasStaticField(serviceNowName)
+      ) {
+        key = serviceNowName;
+      } else {
+        key = detectedKeyFor(serviceNowName);
+      }
+    }
     const firstSeenAt = Number.isFinite(item.firstSeenAt) ? Math.round(item.firstSeenAt) : now;
     const lastSeenAt = Number.isFinite(item.lastSeenAt) ? Math.round(item.lastSeenAt) : now;
     const normalized = {
@@ -473,7 +493,7 @@
       label,
       group: normalizeGroup(item.group),
       renderAs: normalizeRenderAs(item.renderAs),
-      reason: normalizeReason(item.reason),
+      reason,
       firstSeenAt: Math.min(firstSeenAt, lastSeenAt),
       lastSeenAt: Math.max(firstSeenAt, lastSeenAt)
     };
@@ -896,6 +916,83 @@
   NS.markdown = { render, escapeHtml, safeHref };
 })(typeof self !== 'undefined' ? self : globalThis);
 
+/* src/shared/clipboard.js */
+(function (root) {
+  'use strict';
+  const NS = (root.SNCRM = root.SNCRM || {});
+  const log = NS.log && NS.log.make ? NS.log.make('clipboard') : { error() {} };
+
+  function copyTextareaFallback(doc, text) {
+    const textarea = doc.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '-10000px';
+    doc.body.appendChild(textarea);
+    textarea.select();
+    let ok = false;
+    try {
+      ok = doc.execCommand('copy');
+    } catch (e) {
+      log.error('execCommand copy failed', e);
+    }
+    textarea.remove();
+    return ok;
+  }
+
+  function writePlain(doc, text) {
+    const nav = doc.defaultView && doc.defaultView.navigator;
+    if (nav && nav.clipboard && typeof nav.clipboard.writeText === 'function') {
+      return nav.clipboard.writeText(text).then(
+        () => true,
+        () => copyTextareaFallback(doc, text)
+      );
+    }
+    return Promise.resolve(copyTextareaFallback(doc, text));
+  }
+
+  function writeRich(doc, text, html) {
+    const nav = doc.defaultView && doc.defaultView.navigator;
+    const ClipboardItem = doc.defaultView && doc.defaultView.ClipboardItem;
+    if (
+      nav &&
+      nav.clipboard &&
+      typeof nav.clipboard.write === 'function' &&
+      typeof ClipboardItem === 'function'
+    ) {
+      const item = new ClipboardItem({
+        'text/plain': new Blob([text], { type: 'text/plain' }),
+        'text/html': new Blob([html], { type: 'text/html' })
+      });
+      return nav.clipboard.write([item]).then(
+        () => true,
+        () => writePlain(doc, text)
+      );
+    }
+    return writePlain(doc, text);
+  }
+
+  /* Copy a description to the clipboard. `format` is the value of the
+   * `descriptionCopyFormat` setting ('markdown' | 'rich'). `renderHtml` is
+   * only invoked for 'rich'. Resolves to true when the copy succeeded. */
+  function copyDescription(text, format, renderHtml) {
+    const doc = (typeof document !== 'undefined' && document) || null;
+    if (!doc || text == null) return Promise.resolve(false);
+    if (format === 'rich') {
+      let html = '';
+      try {
+        html = typeof renderHtml === 'function' ? renderHtml(String(text)) : String(text);
+      } catch (e) {
+        log.error('rich render failed, falling back to plain text', e);
+      }
+      return writeRich(doc, String(text), html);
+    }
+    return writePlain(doc, String(text));
+  }
+
+  NS.clipboard = { copyDescription };
+})(typeof self !== 'undefined' ? self : globalThis);
+
 /* src/shared/dates.js */
 (function (root) {
   'use strict';
@@ -980,9 +1077,16 @@
    * single querySelector(`[name="…"]`) — far more reliable than label-text
    * matching.
    *
-   * Fields are grouped using the same section names the form renders
-   * ("Opportunity Information", "Description", etc.), so the options page
-   * mirrors the page structure.
+   * The static catalog below serves three jobs:
+   *   1. Default selection + fresh-install fallback for the options page.
+   *   2. Curated label/alias/renderAs hints that survive live detection
+   *      (`markdown`, date, `badge-list`, `link`, `number`).
+   *   3. Group fallback when the live form does not expose a section.
+   *
+   * The live form is the source of truth for which fields exist and which
+   * section they belong to: `refreshDiscoveredFields` folds `reason: 'known'`
+   * discoveries over the static entries so the detected section heading wins,
+   * and appends genuinely new fields under their `detected:*` keys.
    *
    * `renderAs: 'markdown'` marks long-form fields that render as a wide
    * markdown block below the grid.
@@ -1202,15 +1306,46 @@
     }, 'detected');
   }
 
+  /* Known fields reported by discovery carry a live-detected section. Keep the
+   * curated label/aliases/renderAs but let the real form section win for the
+   * group (curated group stays only when no section was detected). */
+  function applyKnownOverride(staticMeta, detected) {
+    const merged = { ...staticMeta };
+    const liveGroup = String(detected && detected.group || '').replace(/\s+/g, ' ').trim();
+    if (liveGroup && liveGroup !== 'Other') merged.group = liveGroup;
+    return merged;
+  }
+
+  /* Rebuild the active field list from the pristine static catalog plus any
+   * persisted discovery metadata.
+   *
+   * - Entries with `reason: 'known'` map onto a static field (by key, falling
+   *   back to serviceNowName) and only ever override its group.
+   * - Genuinely new fields (`detected:*` keys) are appended like before.
+   * - The static catalog always stays the base so selected keys keep
+   *   resolving even before the form has been scanned. */
   function refreshDiscoveredFields(fields) {
     for (const key of discoveredByKey.keys()) delete byKey[key];
     discoveredByKey.clear();
 
-    FIELDS.splice(0, FIELDS.length, ...STATIC_FIELDS);
-    allKeys.splice(0, allKeys.length, ...STATIC_FIELDS.map((field) => field.key));
+    const nextKnown = STATIC_FIELDS.slice();
+    const knownIndexByKey = new Map(nextKnown.map((field, index) => [field.key, index]));
+    const knownByServiceNowName = new Map(nextKnown.map((field) => [field.serviceNowName, field]));
 
     const nextDetected = [];
     for (const field of fields || []) {
+      const serviceNowName = normalizeInternalName(field && field.serviceNowName);
+      if (!serviceNowName) continue;
+
+      if (field && field.reason === 'known') {
+        const staticMeta = staticByKey[field.key] || knownByServiceNowName.get(serviceNowName);
+        if (!staticMeta) continue;
+        const index = knownIndexByKey.get(staticMeta.key);
+        if (index == null) continue;
+        nextKnown[index] = applyKnownOverride(staticMeta, field);
+        continue;
+      }
+
       const meta = createDetectedField(field);
       if (!meta.serviceNowName) continue;
       if (hasStaticField(meta.serviceNowName)) continue;
@@ -1223,6 +1358,10 @@
       a.label.localeCompare(b.label) ||
       a.serviceNowName.localeCompare(b.serviceNowName)
     ));
+
+    FIELDS.splice(0, FIELDS.length, ...nextKnown);
+    allKeys.splice(0, allKeys.length, ...nextKnown.map((field) => field.key));
+    for (const field of nextKnown) byKey[field.key] = field;
 
     for (const field of nextDetected) {
       FIELDS.push(field);
@@ -1695,6 +1834,12 @@
     return baseHits.some(isVisible);
   }
 
+  /* Report every visible field on the live form, grouped by its real ServiceNow
+   * section. Fields the registry already knows are emitted as `reason: 'known'`
+   * with their static key and a live-detected group (curated group as fallback).
+   * Genuinely new fields keep the `detected:*` key space. Only internal noise
+   * names (`_input`, `*_input`, `*-date` companions) land in
+   * `resolvedServiceNowNames` so stale local discoveries can be cleaned up. */
   function discoverFields(rootEl) {
     if (!rootEl) return { discoveries: [], resolvedServiceNowNames: [] };
     const context = extractionContextFor(rootEl);
@@ -1715,7 +1860,19 @@
 
       const knownByName = byKey[serviceNowName];
       if (knownByName) {
-        resolvedServiceNowNames.push(serviceNowName);
+        const key = knownByName.key;
+        if (seenDiscoveries.has(key)) continue;
+        seenDiscoveries.add(key);
+        const detectedGroup = fieldGroupForElement(visible, context);
+        discoveries.push({
+          key,
+          serviceNowName,
+          label: knownByName.label,
+          group: detectedGroup !== 'Other' ? detectedGroup : knownByName.group,
+          renderAs: knownByName.renderAs,
+          reason: 'known',
+          matchedRegistryKey: key
+        });
         continue;
       }
 
@@ -2342,6 +2499,8 @@
   const LARGE_CLASS = 'sncrm-original-description-large';
   const RESIZE_ROW_CLASS = 'sncrm-description-resize-row';
   const RESIZE_HANDLE_CLASS = 'sncrm-description-resize-handle';
+  const COPY_ROW_CLASS = 'sncrm-description-copy-row';
+  const COPY_BUTTON_CLASS = 'sncrm-description-copy-button';
   const SHADOW_STYLE_ATTR = 'data-sncrm-original-description-style';
   const MIN_RESIZE_EDITOR_HEIGHT = 120;
   const MAX_RESIZE_EDITOR_HEIGHT = 2000;
@@ -2379,6 +2538,12 @@
   let activeMode = null;
   let activeHandleRow = null;
   let activeHandle = null;
+  let activeCopyRow = null;
+  let activeCopyButton = null;
+  // Every copy row this module has mounted (light DOM or shadow). Tracked so
+  // mounts are removed even across shadow roots, which document.querySelector
+  // cannot see.
+  const mountedCopyRows = new Set();
   let activeResizeObserver = null;
   let preferredEditorHeight = null;
   let saveHeightTimer = null;
@@ -2673,6 +2838,43 @@
     `:host(.${HOST_CLASS}) .${EDITOR_CLASS}:focus {`,
     '  outline: 2px solid rgba(37, 99, 235, 0.22);',
     '  outline-offset: 0;',
+    '}',
+    // Copy button. Mounted at fieldEl.parentNode which can sit inside a shadow
+    // root, where document-level styles.css cannot reach — so carry the rules
+    // here too. High specificity + !important to beat SNow's own button reset.
+    `.${COPY_ROW_CLASS} {`,
+    '  display: flex;',
+    '  justify-content: flex-end;',
+    '  width: fit-content;',
+    '  margin: 0 0 4px auto;',
+    '  position: relative;',
+    '  z-index: 2;',
+    '  pointer-events: auto;',
+    '}',
+    `.${COPY_ROW_CLASS} .${COPY_BUTTON_CLASS} {`,
+    '  appearance: none;',
+    '  display: inline-flex !important;',
+    '  align-items: center;',
+    '  gap: 5px;',
+    '  padding: 4px 11px !important;',
+    '  font: 600 11px/1.2 inherit !important;',
+    '  letter-spacing: 0.03em;',
+    '  color: #334155 !important;',
+    '  background: #ffffff !important;',
+    '  border: 1px solid rgba(15, 23, 42, 0.18) !important;',
+    '  border-radius: 6px !important;',
+    '  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);',
+    '  cursor: pointer;',
+    '  user-select: none;',
+    '}',
+    `.${COPY_ROW_CLASS} .${COPY_BUTTON_CLASS}:hover {`,
+    '  border-color: rgba(37, 99, 235, 0.5) !important;',
+    '  color: #1d4ed8 !important;',
+    '  background: #f8fafc !important;',
+    '}',
+    `.${COPY_ROW_CLASS} .${COPY_BUTTON_CLASS}:focus-visible {`,
+    '  outline: 2px solid rgba(37, 99, 235, 0.55);',
+    '  outline-offset: 1px;',
     '}'
   ].join('\n');
 
@@ -3045,6 +3247,100 @@
     clearPendingDragHeight();
   }
 
+  /* Raw source text of the description editor: textarea value, or the
+   * rendered text of a contenteditable / [role="textbox"] editor. */
+  function editorSourceText(target) {
+    const editor = target && target.editorEl;
+    if (!editor) return null;
+    if (typeof editor.value === 'string') return editor.value;
+    return (editor.innerText || editor.textContent || '').replace(/\u00A0/g, ' ');
+  }
+
+  /* Copy button anchored in a right-aligned toolbar row ABOVE the field
+   * (mirrors the resize row below it). The format comes from the
+   * descriptionCopyFormat setting, read live at click time.
+   *
+   * Mounting is idempotent at the DOM level: every row this module previously
+   * mounted is removed first (tracked in mountedCopyRows, so it works whether
+   * the row landed in the light DOM or inside a ServiceNow shadow root).
+   * Styles are injected into the row's own shadow root when needed, since
+   * document-level styles.css cannot reach inside a shadow root. */
+  function mountCopyButton(target) {
+    const anchor = target.fieldEl;
+    if (!anchor || !anchor.parentNode) return;
+    removeAllMountedCopyRows();
+    const doc = anchor.ownerDocument || document;
+    const row = doc.createElement('div');
+    row.className = COPY_ROW_CLASS;
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.className = COPY_BUTTON_CLASS;
+    button.setAttribute('aria-label', 'Copy Description');
+    button.setAttribute('title', 'Copy Description');
+    button.innerHTML = [
+      '<svg class="sncrm-description-copy-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">',
+      '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect>',
+      '<path d="M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" fill="none" stroke="currentColor" stroke-width="1.4"></path>',
+      '</svg>',
+      '<span class="sncrm-description-copy-label">Copy</span>'
+    ].join('');
+    const label = button.querySelector('.sncrm-description-copy-label');
+    row.appendChild(button);
+    anchor.parentNode.insertBefore(row, anchor);
+    mountedCopyRows.add(row);
+    activeCopyRow = row;
+    activeCopyButton = button;
+    // Styled wherever it landed: page CSS covers the light DOM, and the
+    // enhancer's shadow stylesheet carries the copy rules into shadow roots.
+    const rowRoot = row.getRootNode && row.getRootNode();
+    if (rowRoot && rowRoot instanceof ShadowRoot) ensureShadowStyle(rowRoot);
+    button.addEventListener('click', () => {
+      const value = editorSourceText(activeTarget || target);
+      if (value == null) return;
+      const settingsPromise = (storage && typeof storage.get === 'function')
+        ? storage.get()
+        : Promise.resolve({ descriptionCopyFormat: 'markdown' });
+      settingsPromise
+        .then((settings) => NS.clipboard.copyDescription(
+          value,
+          settings && settings.descriptionCopyFormat,
+          NS.markdown && NS.markdown.render
+        ))
+        .catch(() => false)
+        .then((ok) => {
+          if (!ok) return;
+          if (label) label.textContent = 'Copied';
+          if (button._sncrmCopyTimer) clearTimeout(button._sncrmCopyTimer);
+          button._sncrmCopyTimer = setTimeout(() => {
+            if (label) label.textContent = 'Copy';
+          }, 1200);
+        });
+    });
+  }
+
+  function removeAllMountedCopyRows() {
+    for (const row of mountedCopyRows) {
+      const button = row && row.querySelector && row.querySelector('.' + COPY_BUTTON_CLASS);
+      if (button && button._sncrmCopyTimer) {
+        clearTimeout(button._sncrmCopyTimer);
+        button._sncrmCopyTimer = null;
+      }
+      if (row && row.parentNode) row.parentNode.removeChild(row);
+    }
+    mountedCopyRows.clear();
+  }
+
+  function removeCopyButton() {
+    removeAllMountedCopyRows();
+    // Belt-and-braces: sweep any stragglers from earlier bundle instances that
+    // are still in the document's light DOM.
+    for (const stray of document.querySelectorAll('.' + COPY_ROW_CLASS)) {
+      stray.remove();
+    }
+    activeCopyRow = null;
+    activeCopyButton = null;
+  }
+
   function clear() {
     flushPendingHeightSave();
     if (activeResizeObserver) {
@@ -3052,6 +3348,7 @@
       activeResizeObserver = null;
     }
     removeHandle();
+    removeCopyButton();
     restoreProps();
     for (const node of appliedNodes) {
       if (!node || !(node instanceof Element)) continue;
@@ -3117,6 +3414,8 @@
     if (shadowRoot) ensureShadowStyle(shadowRoot);
 
     if (!activeHandle) mountHandle(target);
+
+    if (!activeCopyButton) mountCopyButton(target);
 
     // Observe native resize-corner drags. Height is set without !important so
     // the browser's own resize drag can update element.style.height freely.
@@ -3453,25 +3752,82 @@
     }
   }
 
-  function ensureMarkdownNodes(block) {
+  const DESCRIPTION_COPY_LABEL = 'Copy';
+  const DESCRIPTION_COPIED_LABEL = 'Copied';
+
+  /* Copy button for the Description markdown block ("expanded view"). Reads
+   * the raw source stashed on the block, resolves the current
+   * descriptionCopyFormat setting at click time, and reports back with a
+   * brief label swap. */
+  function bindDescriptionCopy(block, button) {
+    button.addEventListener('click', () => {
+      const value = block && block._sncrmValue;
+      if (value == null) return;
+      const settingsPromise = (self.SNCRM.storage && typeof self.SNCRM.storage.get === 'function')
+        ? self.SNCRM.storage.get()
+        : Promise.resolve({ descriptionCopyFormat: 'markdown' });
+      settingsPromise
+        .then((settings) => self.SNCRM.clipboard.copyDescription(
+          value,
+          settings && settings.descriptionCopyFormat,
+          self.SNCRM.markdown && self.SNCRM.markdown.render
+        ))
+        .catch(() => false)
+        .then((ok) => {
+          if (!ok) return;
+          button.textContent = DESCRIPTION_COPIED_LABEL;
+          if (button._sncrmCopyTimer) clearTimeout(button._sncrmCopyTimer);
+          button._sncrmCopyTimer = setTimeout(() => {
+            button.textContent = DESCRIPTION_COPY_LABEL;
+          }, 1200);
+        });
+    });
+  }
+
+  function ensureMarkdownNodes(block, withCopy) {
     let head = block && block._sncrmHeadEl;
     let body = block && block._sncrmBodyEl;
-    if (head instanceof Element && body instanceof Element) {
-      return { head, body };
+    let copyBtn = block && block._sncrmCopyBtn;
+    if (!(head instanceof Element) || !(body instanceof Element)) {
+      head = el('div', { className: 'sncrm-md-label' });
+      body = el('div', { className: 'sncrm-md-body' });
+      block.replaceChildren(head, body);
+      block._sncrmHeadEl = head;
+      block._sncrmBodyEl = body;
     }
-    head = el('div', { className: 'sncrm-md-label' });
-    body = el('div', { className: 'sncrm-md-body' });
-    block.replaceChildren(head, body);
-    block._sncrmHeadEl = head;
-    block._sncrmBodyEl = body;
+    if (withCopy && !(copyBtn instanceof Element)) {
+      copyBtn = el('button', {
+        className: 'sncrm-md-copy',
+        text: DESCRIPTION_COPY_LABEL,
+        attrs: {
+          type: 'button',
+          'aria-label': 'Copy Description',
+          title: 'Copy Description'
+        }
+      });
+      const label = el('span', { className: 'sncrm-md-label-text' });
+      head.classList.add('has-copy');
+      head.append(label, copyBtn);
+      head._sncrmLabelTextEl = label;
+      block._sncrmCopyBtn = copyBtn;
+      bindDescriptionCopy(block, copyBtn);
+    } else if (!withCopy && copyBtn instanceof Element) {
+      copyBtn.remove();
+      head.classList.remove('has-copy');
+      head._sncrmLabelTextEl = null;
+      block._sncrmCopyBtn = null;
+    }
     return { head, body };
   }
 
   function updateMarkdownBlock(block, meta, value, opts) {
     const autoHeight = !!(opts && opts.autoHeight);
-    const { head, body } = ensureMarkdownNodes(block);
+    const { head, body } = ensureMarkdownNodes(block, meta.key === 'description');
     block.className = `sncrm-md sncrm-md-${meta.key}` + (autoHeight ? ' is-auto-height' : '');
-    head.textContent = meta.label;
+    const labelEl = head._sncrmLabelTextEl;
+    if (labelEl instanceof Element) labelEl.textContent = meta.label;
+    else head.textContent = meta.label;
+    block._sncrmValue = value;
     body.className = 'sncrm-md-body' + (value ? '' : ' is-empty');
     if (value) {
       body.innerHTML = self.SNCRM.markdown.render(value);
@@ -5305,9 +5661,17 @@
 /* src/content/index.js */
 /* Content script entrypoint. Kicks off the controller once all sibling
  * scripts are loaded. The manifest lists files in order so NS.* is fully
- * populated by the time this file runs. */
+ * populated by the time this file runs.
+ *
+ * The service worker can re-inject the whole bundle via chrome.scripting as a
+ * fallback (raced against the manifest's document_idle injection), so guard
+ * boot with a world-shared flag. Both injections share the same isolated
+ * world, so the second start sees this and no-ops — one controller, one of
+ * every piece of UI. */
 (function () {
   'use strict';
+  if (self.__sncrmBooted === true) return;
+  self.__sncrmBooted = true;
   try {
     self.SNCRM.controller.init();
   } catch (e) {

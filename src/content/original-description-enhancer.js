@@ -10,6 +10,8 @@
   const LARGE_CLASS = 'sncrm-original-description-large';
   const RESIZE_ROW_CLASS = 'sncrm-description-resize-row';
   const RESIZE_HANDLE_CLASS = 'sncrm-description-resize-handle';
+  const COPY_ROW_CLASS = 'sncrm-description-copy-row';
+  const COPY_BUTTON_CLASS = 'sncrm-description-copy-button';
   const SHADOW_STYLE_ATTR = 'data-sncrm-original-description-style';
   const MIN_RESIZE_EDITOR_HEIGHT = 120;
   const MAX_RESIZE_EDITOR_HEIGHT = 2000;
@@ -47,6 +49,12 @@
   let activeMode = null;
   let activeHandleRow = null;
   let activeHandle = null;
+  let activeCopyRow = null;
+  let activeCopyButton = null;
+  // Every copy row this module has mounted (light DOM or shadow). Tracked so
+  // mounts are removed even across shadow roots, which document.querySelector
+  // cannot see.
+  const mountedCopyRows = new Set();
   let activeResizeObserver = null;
   let preferredEditorHeight = null;
   let saveHeightTimer = null;
@@ -341,6 +349,43 @@
     `:host(.${HOST_CLASS}) .${EDITOR_CLASS}:focus {`,
     '  outline: 2px solid rgba(37, 99, 235, 0.22);',
     '  outline-offset: 0;',
+    '}',
+    // Copy button. Mounted at fieldEl.parentNode which can sit inside a shadow
+    // root, where document-level styles.css cannot reach — so carry the rules
+    // here too. High specificity + !important to beat SNow's own button reset.
+    `.${COPY_ROW_CLASS} {`,
+    '  display: flex;',
+    '  justify-content: flex-end;',
+    '  width: fit-content;',
+    '  margin: 0 0 4px auto;',
+    '  position: relative;',
+    '  z-index: 2;',
+    '  pointer-events: auto;',
+    '}',
+    `.${COPY_ROW_CLASS} .${COPY_BUTTON_CLASS} {`,
+    '  appearance: none;',
+    '  display: inline-flex !important;',
+    '  align-items: center;',
+    '  gap: 5px;',
+    '  padding: 4px 11px !important;',
+    '  font: 600 11px/1.2 inherit !important;',
+    '  letter-spacing: 0.03em;',
+    '  color: #334155 !important;',
+    '  background: #ffffff !important;',
+    '  border: 1px solid rgba(15, 23, 42, 0.18) !important;',
+    '  border-radius: 6px !important;',
+    '  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);',
+    '  cursor: pointer;',
+    '  user-select: none;',
+    '}',
+    `.${COPY_ROW_CLASS} .${COPY_BUTTON_CLASS}:hover {`,
+    '  border-color: rgba(37, 99, 235, 0.5) !important;',
+    '  color: #1d4ed8 !important;',
+    '  background: #f8fafc !important;',
+    '}',
+    `.${COPY_ROW_CLASS} .${COPY_BUTTON_CLASS}:focus-visible {`,
+    '  outline: 2px solid rgba(37, 99, 235, 0.55);',
+    '  outline-offset: 1px;',
     '}'
   ].join('\n');
 
@@ -713,6 +758,100 @@
     clearPendingDragHeight();
   }
 
+  /* Raw source text of the description editor: textarea value, or the
+   * rendered text of a contenteditable / [role="textbox"] editor. */
+  function editorSourceText(target) {
+    const editor = target && target.editorEl;
+    if (!editor) return null;
+    if (typeof editor.value === 'string') return editor.value;
+    return (editor.innerText || editor.textContent || '').replace(/\u00A0/g, ' ');
+  }
+
+  /* Copy button anchored in a right-aligned toolbar row ABOVE the field
+   * (mirrors the resize row below it). The format comes from the
+   * descriptionCopyFormat setting, read live at click time.
+   *
+   * Mounting is idempotent at the DOM level: every row this module previously
+   * mounted is removed first (tracked in mountedCopyRows, so it works whether
+   * the row landed in the light DOM or inside a ServiceNow shadow root).
+   * Styles are injected into the row's own shadow root when needed, since
+   * document-level styles.css cannot reach inside a shadow root. */
+  function mountCopyButton(target) {
+    const anchor = target.fieldEl;
+    if (!anchor || !anchor.parentNode) return;
+    removeAllMountedCopyRows();
+    const doc = anchor.ownerDocument || document;
+    const row = doc.createElement('div');
+    row.className = COPY_ROW_CLASS;
+    const button = doc.createElement('button');
+    button.type = 'button';
+    button.className = COPY_BUTTON_CLASS;
+    button.setAttribute('aria-label', 'Copy Description');
+    button.setAttribute('title', 'Copy Description');
+    button.innerHTML = [
+      '<svg class="sncrm-description-copy-icon" viewBox="0 0 16 16" width="12" height="12" aria-hidden="true" focusable="false">',
+      '<rect x="5.5" y="5.5" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"></rect>',
+      '<path d="M10.5 5.5V4a1.5 1.5 0 0 0-1.5-1.5H4A1.5 1.5 0 0 0 2.5 4v5A1.5 1.5 0 0 0 4 10.5h1.5" fill="none" stroke="currentColor" stroke-width="1.4"></path>',
+      '</svg>',
+      '<span class="sncrm-description-copy-label">Copy</span>'
+    ].join('');
+    const label = button.querySelector('.sncrm-description-copy-label');
+    row.appendChild(button);
+    anchor.parentNode.insertBefore(row, anchor);
+    mountedCopyRows.add(row);
+    activeCopyRow = row;
+    activeCopyButton = button;
+    // Styled wherever it landed: page CSS covers the light DOM, and the
+    // enhancer's shadow stylesheet carries the copy rules into shadow roots.
+    const rowRoot = row.getRootNode && row.getRootNode();
+    if (rowRoot && rowRoot instanceof ShadowRoot) ensureShadowStyle(rowRoot);
+    button.addEventListener('click', () => {
+      const value = editorSourceText(activeTarget || target);
+      if (value == null) return;
+      const settingsPromise = (storage && typeof storage.get === 'function')
+        ? storage.get()
+        : Promise.resolve({ descriptionCopyFormat: 'markdown' });
+      settingsPromise
+        .then((settings) => NS.clipboard.copyDescription(
+          value,
+          settings && settings.descriptionCopyFormat,
+          NS.markdown && NS.markdown.render
+        ))
+        .catch(() => false)
+        .then((ok) => {
+          if (!ok) return;
+          if (label) label.textContent = 'Copied';
+          if (button._sncrmCopyTimer) clearTimeout(button._sncrmCopyTimer);
+          button._sncrmCopyTimer = setTimeout(() => {
+            if (label) label.textContent = 'Copy';
+          }, 1200);
+        });
+    });
+  }
+
+  function removeAllMountedCopyRows() {
+    for (const row of mountedCopyRows) {
+      const button = row && row.querySelector && row.querySelector('.' + COPY_BUTTON_CLASS);
+      if (button && button._sncrmCopyTimer) {
+        clearTimeout(button._sncrmCopyTimer);
+        button._sncrmCopyTimer = null;
+      }
+      if (row && row.parentNode) row.parentNode.removeChild(row);
+    }
+    mountedCopyRows.clear();
+  }
+
+  function removeCopyButton() {
+    removeAllMountedCopyRows();
+    // Belt-and-braces: sweep any stragglers from earlier bundle instances that
+    // are still in the document's light DOM.
+    for (const stray of document.querySelectorAll('.' + COPY_ROW_CLASS)) {
+      stray.remove();
+    }
+    activeCopyRow = null;
+    activeCopyButton = null;
+  }
+
   function clear() {
     flushPendingHeightSave();
     if (activeResizeObserver) {
@@ -720,6 +859,7 @@
       activeResizeObserver = null;
     }
     removeHandle();
+    removeCopyButton();
     restoreProps();
     for (const node of appliedNodes) {
       if (!node || !(node instanceof Element)) continue;
@@ -785,6 +925,8 @@
     if (shadowRoot) ensureShadowStyle(shadowRoot);
 
     if (!activeHandle) mountHandle(target);
+
+    if (!activeCopyButton) mountCopyButton(target);
 
     // Observe native resize-corner drags. Height is set without !important so
     // the browser's own resize drag can update element.style.height freely.

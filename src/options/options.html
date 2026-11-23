@@ -33,6 +33,16 @@
     .row-setting { align-items: flex-start; gap: 12px; padding: 8px 0; }
     .row-setting input[type="checkbox"] { margin-top: 2px; }
     .row-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .row-setting select {
+      margin-top: 4px;
+      max-width: 260px;
+      padding: 6px 8px;
+      font: 500 13px/1.2 inherit;
+      color: var(--fg);
+      background: var(--bg);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+    }
     .row-title { font-weight: 600; color: var(--fg); }
     .row-help { color: var(--muted); font-size: 12px; }
     .inline { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
@@ -341,6 +351,16 @@
           <span class="row-help">Increase the starting height of the original ServiceNow Description field. Resize using the handle below the field — the height is remembered across refreshes.</span>
         </span>
       </label>
+      <label class="row row-setting">
+        <span class="row-body">
+          <span class="row-title">Copy Description content format</span>
+          <span class="row-help">Used by the copy button on the native Description field and the panel’s Description card.</span>
+          <select id="descriptionCopyFormat">
+            <option value="markdown">Raw markdown</option>
+            <option value="rich">Rich text (HTML)</option>
+          </select>
+        </span>
+      </label>
     </section>
 
     <section class="card">
@@ -361,7 +381,7 @@
     </section>
 
     <section class="card">
-      <h2>Fields <span class="hint">check to add to the layout above</span></h2>
+      <h2>Fields <span class="hint">check to add to the layout above · grouped by the live form's sections</span></h2>
       <div id="fields"></div>
       <div class="btn-group">
         <button type="button" class="btn" id="selectAll">Select all</button>

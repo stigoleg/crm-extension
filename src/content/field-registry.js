@@ -7,9 +7,16 @@
    * single querySelector(`[name="…"]`) — far more reliable than label-text
    * matching.
    *
-   * Fields are grouped using the same section names the form renders
-   * ("Opportunity Information", "Description", etc.), so the options page
-   * mirrors the page structure.
+   * The static catalog below serves three jobs:
+   *   1. Default selection + fresh-install fallback for the options page.
+   *   2. Curated label/alias/renderAs hints that survive live detection
+   *      (`markdown`, date, `badge-list`, `link`, `number`).
+   *   3. Group fallback when the live form does not expose a section.
+   *
+   * The live form is the source of truth for which fields exist and which
+   * section they belong to: `refreshDiscoveredFields` folds `reason: 'known'`
+   * discoveries over the static entries so the detected section heading wins,
+   * and appends genuinely new fields under their `detected:*` keys.
    *
    * `renderAs: 'markdown'` marks long-form fields that render as a wide
    * markdown block below the grid.
@@ -229,15 +236,46 @@
     }, 'detected');
   }
 
+  /* Known fields reported by discovery carry a live-detected section. Keep the
+   * curated label/aliases/renderAs but let the real form section win for the
+   * group (curated group stays only when no section was detected). */
+  function applyKnownOverride(staticMeta, detected) {
+    const merged = { ...staticMeta };
+    const liveGroup = String(detected && detected.group || '').replace(/\s+/g, ' ').trim();
+    if (liveGroup && liveGroup !== 'Other') merged.group = liveGroup;
+    return merged;
+  }
+
+  /* Rebuild the active field list from the pristine static catalog plus any
+   * persisted discovery metadata.
+   *
+   * - Entries with `reason: 'known'` map onto a static field (by key, falling
+   *   back to serviceNowName) and only ever override its group.
+   * - Genuinely new fields (`detected:*` keys) are appended like before.
+   * - The static catalog always stays the base so selected keys keep
+   *   resolving even before the form has been scanned. */
   function refreshDiscoveredFields(fields) {
     for (const key of discoveredByKey.keys()) delete byKey[key];
     discoveredByKey.clear();
 
-    FIELDS.splice(0, FIELDS.length, ...STATIC_FIELDS);
-    allKeys.splice(0, allKeys.length, ...STATIC_FIELDS.map((field) => field.key));
+    const nextKnown = STATIC_FIELDS.slice();
+    const knownIndexByKey = new Map(nextKnown.map((field, index) => [field.key, index]));
+    const knownByServiceNowName = new Map(nextKnown.map((field) => [field.serviceNowName, field]));
 
     const nextDetected = [];
     for (const field of fields || []) {
+      const serviceNowName = normalizeInternalName(field && field.serviceNowName);
+      if (!serviceNowName) continue;
+
+      if (field && field.reason === 'known') {
+        const staticMeta = staticByKey[field.key] || knownByServiceNowName.get(serviceNowName);
+        if (!staticMeta) continue;
+        const index = knownIndexByKey.get(staticMeta.key);
+        if (index == null) continue;
+        nextKnown[index] = applyKnownOverride(staticMeta, field);
+        continue;
+      }
+
       const meta = createDetectedField(field);
       if (!meta.serviceNowName) continue;
       if (hasStaticField(meta.serviceNowName)) continue;
@@ -250,6 +288,10 @@
       a.label.localeCompare(b.label) ||
       a.serviceNowName.localeCompare(b.serviceNowName)
     ));
+
+    FIELDS.splice(0, FIELDS.length, ...nextKnown);
+    allKeys.splice(0, allKeys.length, ...nextKnown.map((field) => field.key));
+    for (const field of nextKnown) byKey[field.key] = field;
 
     for (const field of nextDetected) {
       FIELDS.push(field);

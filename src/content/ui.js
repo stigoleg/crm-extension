@@ -299,25 +299,82 @@
     }
   }
 
-  function ensureMarkdownNodes(block) {
+  const DESCRIPTION_COPY_LABEL = 'Copy';
+  const DESCRIPTION_COPIED_LABEL = 'Copied';
+
+  /* Copy button for the Description markdown block ("expanded view"). Reads
+   * the raw source stashed on the block, resolves the current
+   * descriptionCopyFormat setting at click time, and reports back with a
+   * brief label swap. */
+  function bindDescriptionCopy(block, button) {
+    button.addEventListener('click', () => {
+      const value = block && block._sncrmValue;
+      if (value == null) return;
+      const settingsPromise = (self.SNCRM.storage && typeof self.SNCRM.storage.get === 'function')
+        ? self.SNCRM.storage.get()
+        : Promise.resolve({ descriptionCopyFormat: 'markdown' });
+      settingsPromise
+        .then((settings) => self.SNCRM.clipboard.copyDescription(
+          value,
+          settings && settings.descriptionCopyFormat,
+          self.SNCRM.markdown && self.SNCRM.markdown.render
+        ))
+        .catch(() => false)
+        .then((ok) => {
+          if (!ok) return;
+          button.textContent = DESCRIPTION_COPIED_LABEL;
+          if (button._sncrmCopyTimer) clearTimeout(button._sncrmCopyTimer);
+          button._sncrmCopyTimer = setTimeout(() => {
+            button.textContent = DESCRIPTION_COPY_LABEL;
+          }, 1200);
+        });
+    });
+  }
+
+  function ensureMarkdownNodes(block, withCopy) {
     let head = block && block._sncrmHeadEl;
     let body = block && block._sncrmBodyEl;
-    if (head instanceof Element && body instanceof Element) {
-      return { head, body };
+    let copyBtn = block && block._sncrmCopyBtn;
+    if (!(head instanceof Element) || !(body instanceof Element)) {
+      head = el('div', { className: 'sncrm-md-label' });
+      body = el('div', { className: 'sncrm-md-body' });
+      block.replaceChildren(head, body);
+      block._sncrmHeadEl = head;
+      block._sncrmBodyEl = body;
     }
-    head = el('div', { className: 'sncrm-md-label' });
-    body = el('div', { className: 'sncrm-md-body' });
-    block.replaceChildren(head, body);
-    block._sncrmHeadEl = head;
-    block._sncrmBodyEl = body;
+    if (withCopy && !(copyBtn instanceof Element)) {
+      copyBtn = el('button', {
+        className: 'sncrm-md-copy',
+        text: DESCRIPTION_COPY_LABEL,
+        attrs: {
+          type: 'button',
+          'aria-label': 'Copy Description',
+          title: 'Copy Description'
+        }
+      });
+      const label = el('span', { className: 'sncrm-md-label-text' });
+      head.classList.add('has-copy');
+      head.append(label, copyBtn);
+      head._sncrmLabelTextEl = label;
+      block._sncrmCopyBtn = copyBtn;
+      bindDescriptionCopy(block, copyBtn);
+    } else if (!withCopy && copyBtn instanceof Element) {
+      copyBtn.remove();
+      head.classList.remove('has-copy');
+      head._sncrmLabelTextEl = null;
+      block._sncrmCopyBtn = null;
+    }
     return { head, body };
   }
 
   function updateMarkdownBlock(block, meta, value, opts) {
     const autoHeight = !!(opts && opts.autoHeight);
-    const { head, body } = ensureMarkdownNodes(block);
+    const { head, body } = ensureMarkdownNodes(block, meta.key === 'description');
     block.className = `sncrm-md sncrm-md-${meta.key}` + (autoHeight ? ' is-auto-height' : '');
-    head.textContent = meta.label;
+    const labelEl = head._sncrmLabelTextEl;
+    if (labelEl instanceof Element) labelEl.textContent = meta.label;
+    else head.textContent = meta.label;
+    block._sncrmValue = value;
     body.className = 'sncrm-md-body' + (value ? '' : ' is-empty');
     if (value) {
       body.innerHTML = self.SNCRM.markdown.render(value);

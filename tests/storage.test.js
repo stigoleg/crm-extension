@@ -163,8 +163,8 @@ async function run() {
     const settings = await storage.get();
 
     assertEqual(settings.columns, 3, 'expected the default layout to use three columns');
-    assertEqual(settings.enhanceOriginalDescription, false, 'expected original description enhancement to default off');
-    assertEqual(settings.largeOriginalDescription, false, 'expected large original description mode to default off');
+    assertEqual(settings.enhanceOriginalDescription, true, 'expected original description enhancement to default on');
+    assertEqual(settings.largeOriginalDescription, true, 'expected large original description mode to default on');
     assertEqual(settings.originalDescriptionHeight, null, 'expected original description preferred height to default to null');
     assertEqual(settings.selectedFields.join(','), 'account,description', 'expected selected fields to survive migration');
     assertEqual(settings.fieldLayout.length, 2, 'expected selected fields to become layout items');
@@ -184,6 +184,20 @@ async function run() {
     const settings = await storage.get();
 
     assertEqual(settings.originalDescriptionHeight, 156, 'expected native manual resize heights below 220 to remain persisted');
+  });
+
+  test('descriptionCopyFormat defaults to raw markdown and rejects unknown values', async () => {
+    const stub = createChromeStub();
+    const storage = loadStorage(stub.chrome);
+
+    const defaults = await storage.get();
+    assertEqual(defaults.descriptionCopyFormat, 'markdown', 'expected raw markdown to be the default copy format');
+
+    const stored = await storage.set({ descriptionCopyFormat: 'rich' });
+    assertEqual(stored.descriptionCopyFormat, 'rich', 'expected the rich format to be accepted');
+
+    const bogus = await storage.set({ descriptionCopyFormat: 'pdf' });
+    assertEqual(bogus.descriptionCopyFormat, 'markdown', 'expected unknown copy formats to fall back to the default');
   });
 
   test('extension context invalidation during read falls back to defaults once without repeated storage calls', async () => {

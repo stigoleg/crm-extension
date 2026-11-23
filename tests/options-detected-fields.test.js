@@ -55,6 +55,7 @@ function makeDom() {
         <input type="checkbox" id="descriptionAutoHeight">
         <input type="checkbox" id="enhanceOriginalDescription">
         <input type="checkbox" id="largeOriginalDescription">
+        <select id="descriptionCopyFormat"><option value="markdown">Raw markdown</option><option value="rich">Rich text (HTML)</option></select>
         <input type="checkbox" id="debug">
         <section id="detectedFieldsCard" hidden><div id="detectedFields"></div></section>
         <div id="layoutGrid"></div>
@@ -214,6 +215,71 @@ async function run() {
       Array.from(window.document.querySelectorAll('#layoutGrid .chip-label')).some((node) => node.textContent.trim() === 'Partner Focus'),
       'expected selecting a detected field to add it to the layout grid with the inferred label'
     );
+
+    dom.window.close();
+  });
+
+  test('persisted known-field discovery groups the Fields card by the live section and stays out of the detected card', async () => {
+    const dom = makeDom();
+    const { window } = dom;
+
+    const settings = {
+      enabled: true,
+      debug: false,
+      defaultCollapsed: false,
+      columns: 3,
+      autoExpandSections: true,
+      panelHeightPercent: 50,
+      panelFullHeight: true,
+      descriptionAutoHeight: true,
+      enhanceOriginalDescription: false,
+      largeOriginalDescription: false,
+      fieldLayout: [{ type: 'field', key: 'account', span: 1 }],
+      selectedFields: ['account']
+    };
+
+    window.SNCRM = {
+      storage: {
+        DEFAULTS: JSON.parse(JSON.stringify(settings)),
+        async get() {
+          return JSON.parse(JSON.stringify(settings));
+        },
+        async set(patch) {
+          Object.assign(settings, patch);
+          return JSON.parse(JSON.stringify(settings));
+        },
+        onChange() {}
+      },
+      discoveryStore: {
+        async get() {
+          return [{
+            key: 'account',
+            serviceNowName: 'account',
+            label: 'Account',
+            group: 'Deal Team',
+            renderAs: 'text',
+            reason: 'known',
+            matchedRegistryKey: 'account',
+            firstSeenAt: 1,
+            lastSeenAt: 1
+          }];
+        },
+        onChange() {}
+      }
+    };
+
+    loadScript(window, 'src/content/field-registry.js');
+    loadScript(window, 'src/options/options.js');
+    await delay(20);
+
+    const fieldsSection = window.document.getElementById('fields');
+    const groupHeadings = Array.from(fieldsSection.querySelectorAll('.group-title')).map((node) => node.textContent.trim());
+    assert(groupHeadings.includes('Deal Team'), 'expected the Fields card to group the known field under its live section');
+    const labels = Array.from(fieldsSection.querySelectorAll('label')).map((node) => node.textContent.trim());
+    assert(labels.some((text) => text.startsWith('Account')), 'expected the Account field to remain in the Fields card');
+
+    const detectedCard = window.document.getElementById('detectedFieldsCard');
+    assertEqual(detectedCard.hidden, true, 'expected a known field not to appear in the detected field changes card');
 
     dom.window.close();
   });

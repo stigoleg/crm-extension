@@ -107,11 +107,20 @@ function loadEnhancer(window, extras = {}) {
   window.SNCRM = Object.assign({
     log: makeLog(),
     storage: {
+      get() { return Promise.resolve({ descriptionCopyFormat: 'markdown' }); },
       set() { return Promise.resolve(); }
     }
   }, extras);
+  Object.defineProperty(window.navigator, 'clipboard', {
+    configurable: true,
+    value: {
+      writeText: (text) => { window.__sncrmCopied = text; return Promise.resolve(); },
+      write: () => Promise.resolve()
+    }
+  });
   loadScript(window, 'src/content/field-registry.js');
   loadScript(window, 'src/content/extractors.js');
+  loadScript(window, 'src/shared/clipboard.js');
   loadScript(window, 'src/content/original-description-enhancer.js');
   return window.SNCRM.originalDescriptionEnhancer;
 }
@@ -664,6 +673,204 @@ test('enhancer releases height caps on ancestors above the field container', () 
   assertEqual(main.style.maxHeight, mainMaxHeightBefore, 'expected main max-height to restore after clear');
   assertEqual(row.style.getPropertyValue('height'), '', 'expected row height to be removed after clear (was not authored in original style)');
 
+  dom.window.close();
+});
+
+test('native copy button mounts above the field and copies the current textarea value', async () => {
+  const dom = makeDom(`
+    <body>
+      <section id="scope">
+        <div class="now-label-value-pair" id="field">
+          <div class="sn-form-label">Description</div>
+          <div class="sn-form-value">
+            <textarea id="desc-editor" name="description">**Hello** world</textarea>
+          </div>
+        </div>
+      </section>
+    </body>
+  `);
+  const { window } = dom;
+  const enhancer = loadEnhancer(window);
+  const scope = window.document.getElementById('scope');
+  const editor = window.document.getElementById('desc-editor');
+  const field = window.document.getElementById('field');
+
+  const applied = enhancer.apply(scope, {
+    enhanceOriginalDescription: true,
+    largeOriginalDescription: false
+  });
+  assert(applied, 'expected enhancer to apply');
+
+  const row = window.document.querySelector('.sncrm-description-copy-row');
+  assert(row, 'expected a copy toolbar row above the field');
+  assertEqual(row.nextElementSibling, field, 'expected the copy row to sit directly above the field container');
+
+  const button = window.document.querySelector('.sncrm-description-copy-button');
+  assert(button, 'expected a copy button in the toolbar row');
+  assertEqual(button.textContent, 'Copy', 'expected the copy button label');
+  assertEqual(button.getAttribute('aria-label'), 'Copy Description', 'expected an accessible label');
+
+  window.__sncrmCopied = null;
+  editor.value = '**Fresh** value';
+  button.dispatchEvent(new window.Event('click', { bubbles: true }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assertEqual(window.__sncrmCopied, '**Fresh** value', 'expected the click to copy the current textarea value');
+
+  dom.window.close();
+});
+
+test('clear() removes the native copy button', () => {
+  const dom = makeDom(`
+    <body>
+      <section id="scope">
+        <div class="now-label-value-pair" id="field">
+          <div class="sn-form-label">Description</div>
+          <div class="sn-form-value">
+            <textarea id="desc-editor" name="description">Hello</textarea>
+          </div>
+        </div>
+      </section>
+    </body>
+  `);
+  const { window } = dom;
+  const enhancer = loadEnhancer(window);
+
+  enhancer.apply(window.document.getElementById('scope'), {
+    enhanceOriginalDescription: true,
+    largeOriginalDescription: true
+  });
+  assert(window.document.querySelector('.sncrm-description-copy-row'), 'expected the copy row after apply');
+
+  enhancer.clear();
+  assertEqual(window.document.querySelectorAll('.sncrm-description-copy-row').length, 0, 'expected the copy row to be removed after clear');
+  assertEqual(window.document.querySelectorAll('.sncrm-description-copy-button').length, 0, 'expected the copy button to be removed after clear');
+
+  dom.window.close();
+});
+
+test('applying twice to the same field keeps exactly one copy button', () => {
+  const dom = makeDom(`
+    <body>
+      <section id="scope">
+        <div class="now-label-value-pair" id="field">
+          <div class="sn-form-label">Description</div>
+          <div class="sn-form-value">
+            <textarea id="desc-editor" name="description">Hello</textarea>
+          </div>
+        </div>
+      </section>
+    </body>
+  `);
+  const { window } = dom;
+  const enhancer = loadEnhancer(window);
+  const scope = window.document.getElementById('scope');
+
+  enhancer.apply(scope, { enhanceOriginalDescription: true, largeOriginalDescription: false });
+  enhancer.apply(scope, { enhanceOriginalDescription: true, largeOriginalDescription: false });
+
+  assertEqual(window.document.querySelectorAll('.sncrm-description-copy-row').length, 1, 'expected exactly one copy row after re-applying to the same field');
+  assertEqual(window.document.querySelectorAll('.sncrm-description-copy-button').length, 1, 'expected exactly one copy button after re-applying to the same field');
+
+  dom.window.close();
+});
+
+test('re-applying to a different field keeps exactly one copy button', () => {
+  const dom = makeDom(`
+    <body>
+      <section id="scope-a">
+        <div class="now-label-value-pair" id="fieldA">
+          <div class="sn-form-label">Description</div>
+          <div class="sn-form-value"><textarea id="desc-a" name="description">A</textarea></div>
+        </div>
+      </section>
+      <section id="scope-b">
+        <div class="now-label-value-pair" id="field-b">
+          <div class="sn-form-label">Description</div>
+          <div class="sn-form-value"><textarea id="desc-b" name="description">B</textarea></div>
+        </div>
+      </section>
+    </body>
+  `);
+  const { window } = dom;
+  const enhancer = loadEnhancer(window);
+
+  enhancer.apply(window.document.getElementById('scope-a'), {
+    enhanceOriginalDescription: true,
+    largeOriginalDescription: false
+  });
+  assertEqual(window.document.querySelectorAll('.sncrm-description-copy-row').length, 1, 'expected one row after the first apply');
+
+  enhancer.apply(window.document.getElementById('scope-b'), {
+    enhanceOriginalDescription: true,
+    largeOriginalDescription: false
+  });
+  assertEqual(window.document.querySelectorAll('.sncrm-description-copy-row').length, 1, 'expected still exactly one row after re-applying to the second field');
+
+  const fieldB = window.document.getElementById('field-b');
+  assertEqual(window.document.querySelector('.sncrm-description-copy-row').nextElementSibling, fieldB, 'expected the surviving row to sit above the currently active field');
+
+  dom.window.close();
+});
+
+test('copy button stays single and styled when the description lives in a shadow root', () => {
+  const dom = makeDom(`
+    <body>
+      <section id="scope">
+        <now-textarea name="description" id="desc-host"></now-textarea>
+      </section>
+    </body>
+  `);
+  const { window } = dom;
+  const enhancer = loadEnhancer(window);
+  const host = window.document.getElementById('desc-host');
+  const shadow = host.attachShadow({ mode: 'open' });
+  shadow.innerHTML = '<div class="sn-form-field"><textarea id="desc-editor"></textarea></div>';
+
+  const scope = window.document.getElementById('scope');
+  const applyOnce = () => {
+    enhancer.apply(scope, {
+      enhanceOriginalDescription: true,
+      largeOriginalDescription: false
+    });
+  };
+  const countRows = () => (
+    shadow.querySelectorAll('.sncrm-description-copy-row').length +
+    window.document.querySelectorAll('.sncrm-description-copy-row').length
+  );
+
+  applyOnce();
+  assertEqual(countRows(), 1, 'expected exactly one copy row across light DOM and shadow roots');
+
+  const styleTag = shadow.querySelector('[data-sncrm-original-description-style]');
+  assert(styleTag, 'expected the enhancer shadow stylesheet in the description shadow root');
+  assert(
+    styleTag.textContent.indexOf('.sncrm-description-copy-button') !== -1,
+    'expected the copy button rules to be injected into the shadow stylesheet'
+  );
+
+  applyOnce();
+  assertEqual(countRows(), 1, 'expected re-applying to keep exactly one copy row');
+
+  enhancer.clear();
+  assertEqual(countRows(), 0, 'expected clear to remove the copy row everywhere');
+
+  dom.window.close();
+});
+
+test('content script boot guard prevents a second controller instance', () => {
+  const dom = makeDom('<body></body>');
+  const { window } = dom;
+  let initCalls = 0;
+  window.SNCRM = {
+    controller: {
+      init() { initCalls++; }
+    }
+  };
+  delete window.__sncrmBooted;
+  loadScript(window, 'src/content/index.js');
+  loadScript(window, 'src/content/index.js');
+  assertEqual(initCalls, 1, 'expected the controller to init exactly once across double injection');
+  assertEqual(window.__sncrmBooted, true, 'expected the boot flag to be set');
   dom.window.close();
 });
 

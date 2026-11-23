@@ -1,7 +1,7 @@
 (function () {
   'use strict';
   const { storage, discoveryStore, fieldRegistry } = self.SNCRM;
-  const { STATIC_FIELDS, byKey } = fieldRegistry;
+  const { STATIC_FIELDS, byKey, staticByKey, isDetectedKey } = fieldRegistry;
 
   const $ = (id) => document.getElementById(id);
   const enabledCb = $('enabled');
@@ -11,6 +11,7 @@
   const descriptionAutoHeightCb = $('descriptionAutoHeight');
   const enhanceOriginalDescriptionCb = $('enhanceOriginalDescription');
   const largeOriginalDescriptionCb = $('largeOriginalDescription');
+  const descriptionCopyFormatSelect = $('descriptionCopyFormat');
   const debugCb = $('debug');
   const detectedFieldsCard = $('detectedFieldsCard');
   const detectedFieldsHost = $('detectedFields');
@@ -503,14 +504,15 @@
 
   function renderDetectedFields() {
     detectedFieldsHost.replaceChildren();
-    if (!discoveredFields.length) {
+    const newFields = discoveredFields.filter((field) => field && isDetectedKey(field.key));
+    if (!newFields.length) {
       detectedFieldsCard.hidden = true;
       return;
     }
 
     detectedFieldsCard.hidden = false;
     const groups = new Map();
-    const sortedFields = discoveredFields.slice().sort((a, b) => (
+    const sortedFields = newFields.slice().sort((a, b) => (
       String(a.group || 'Other').localeCompare(String(b.group || 'Other')) ||
       String(a.label || '').localeCompare(String(b.label || '')) ||
       String(a.serviceNowName || '').localeCompare(String(b.serviceNowName || ''))
@@ -537,7 +539,8 @@
   function renderFields() {
     fieldsHost.replaceChildren();
     const groups = new Map();
-    for (const f of STATIC_FIELDS) {
+    for (const f of fieldRegistry.FIELDS) {
+      if (!staticByKey[f.key]) continue;
       const g = f.group || 'Other';
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g).push(f);
@@ -628,6 +631,11 @@
   bindToggle(descriptionAutoHeightCb, 'descriptionAutoHeight');
   bindToggle(enhanceOriginalDescriptionCb, 'enhanceOriginalDescription');
   bindToggle(largeOriginalDescriptionCb, 'largeOriginalDescription');
+  descriptionCopyFormatSelect.addEventListener('change', () => {
+    current.descriptionCopyFormat = descriptionCopyFormatSelect.value;
+    markDirty('descriptionCopyFormat');
+    scheduleSave();
+  });
   bindToggle(debugCb, 'debug');
 
   /* ----- Bulk actions ----- */
@@ -664,6 +672,7 @@
     current.descriptionAutoHeight = defaults.descriptionAutoHeight;
     current.enhanceOriginalDescription = defaults.enhanceOriginalDescription;
     current.largeOriginalDescription = defaults.largeOriginalDescription;
+    current.descriptionCopyFormat = defaults.descriptionCopyFormat;
     current.panelHeightPercent = defaults.panelHeightPercent;
     current.debug = defaults.debug;
     current.columns = defaults.columns;
@@ -679,6 +688,7 @@
       'descriptionAutoHeight',
       'enhanceOriginalDescription',
       'largeOriginalDescription',
+      'descriptionCopyFormat',
       'panelHeightPercent',
       'debug',
       'columns'
@@ -695,6 +705,8 @@
     descriptionAutoHeightCb.checked = !!current.descriptionAutoHeight;
     enhanceOriginalDescriptionCb.checked = !!current.enhanceOriginalDescription;
     largeOriginalDescriptionCb.checked = !!current.largeOriginalDescription;
+    descriptionCopyFormatSelect.value =
+      current.descriptionCopyFormat === 'rich' ? 'rich' : 'markdown';
     debugCb.checked = current.debug;
     renderColumnsSegment();
     renderLayout();

@@ -80,9 +80,13 @@
     defaultCollapsed: false,
     columns: DEFAULT_COLUMNS,
     autoExpandSections: true,
-    enhanceOriginalDescription: false,
-    largeOriginalDescription: false,
+    enhanceOriginalDescription: true,
+    largeOriginalDescription: true,
     originalDescriptionHeight: null,
+    /* Format used by the copy button on the native Description field and the
+     * panel's Description card: 'markdown' copies the raw source, 'rich'
+     * writes rendered HTML (with a plain-text fallback in the same write). */
+    descriptionCopyFormat: 'markdown',
     /* Banner height as a percentage of viewport height. User-adjustable via
      * the drag handle on the bottom edge of the panel. Clamped to [15, 90]. */
     panelHeightPercent: 50,
@@ -184,6 +188,9 @@
     }
     if (typeof raw.originalDescriptionHeight === 'number' && Number.isFinite(raw.originalDescriptionHeight)) {
       out.originalDescriptionHeight = Math.max(120, Math.round(raw.originalDescriptionHeight));
+    }
+    if (raw.descriptionCopyFormat === 'markdown' || raw.descriptionCopyFormat === 'rich') {
+      out.descriptionCopyFormat = raw.descriptionCopyFormat;
     }
     if (typeof raw.panelHeightPercent === 'number' && Number.isFinite(raw.panelHeightPercent)) {
       out.panelHeightPercent = Math.max(15, Math.min(90, Math.round(raw.panelHeightPercent)));

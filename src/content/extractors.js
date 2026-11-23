@@ -431,6 +431,12 @@
     return baseHits.some(isVisible);
   }
 
+  /* Report every visible field on the live form, grouped by its real ServiceNow
+   * section. Fields the registry already knows are emitted as `reason: 'known'`
+   * with their static key and a live-detected group (curated group as fallback).
+   * Genuinely new fields keep the `detected:*` key space. Only internal noise
+   * names (`_input`, `*_input`, `*-date` companions) land in
+   * `resolvedServiceNowNames` so stale local discoveries can be cleaned up. */
   function discoverFields(rootEl) {
     if (!rootEl) return { discoveries: [], resolvedServiceNowNames: [] };
     const context = extractionContextFor(rootEl);
@@ -451,7 +457,19 @@
 
       const knownByName = byKey[serviceNowName];
       if (knownByName) {
-        resolvedServiceNowNames.push(serviceNowName);
+        const key = knownByName.key;
+        if (seenDiscoveries.has(key)) continue;
+        seenDiscoveries.add(key);
+        const detectedGroup = fieldGroupForElement(visible, context);
+        discoveries.push({
+          key,
+          serviceNowName,
+          label: knownByName.label,
+          group: detectedGroup !== 'Other' ? detectedGroup : knownByName.group,
+          renderAs: knownByName.renderAs,
+          reason: 'known',
+          matchedRegistryKey: key
+        });
         continue;
       }
 

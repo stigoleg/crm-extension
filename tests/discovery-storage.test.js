@@ -241,6 +241,65 @@ async function run() {
     unsubscribe();
   });
 
+  test('merge persists known-field entries with a plain key and keeps the detected group', async () => {
+    const stub = createChromeStub();
+    const discoveryStore = loadDiscoveryStore(stub.chrome);
+
+    await discoveryStore.merge([
+      {
+        key: 'account',
+        serviceNowName: 'account',
+        label: 'Account',
+        group: 'Deal Team',
+        renderAs: 'text',
+        reason: 'known',
+        matchedRegistryKey: 'account'
+      }
+    ]);
+    const remerged = await discoveryStore.merge([
+      {
+        key: 'account',
+        serviceNowName: 'account',
+        label: 'Account',
+        group: 'Core Team',
+        renderAs: 'text',
+        reason: 'known',
+        matchedRegistryKey: 'account'
+      }
+    ]);
+
+    assertEqual(remerged.length, 1, 'expected one stored known entry across merges');
+    assertEqual(remerged[0].key, 'account', 'expected known entries to keep their plain static key');
+    assertEqual(remerged[0].reason, 'known', 'expected the reason to be preserved');
+    assertEqual(remerged[0].group, 'Core Team', 'expected re-detection to update the group');
+    assertEqual(remerged[0].matchedRegistryKey, 'account', 'expected the matched registry key to be preserved');
+  });
+
+  test('get returns persisted known entries for the options page', async () => {
+    const stub = createChromeStub({
+      'sncrm.discovery.v1': [
+        {
+          key: 'account',
+          serviceNowName: 'account',
+          label: 'Account',
+          group: 'Deal Team',
+          renderAs: 'text',
+          reason: 'known',
+          matchedRegistryKey: 'account',
+          firstSeenAt: 1,
+          lastSeenAt: 1
+        }
+      ]
+    });
+    const discoveryStore = loadDiscoveryStore(stub.chrome);
+
+    const fields = await discoveryStore.get();
+
+    assertEqual(fields.length, 1, 'expected the known entry to be returned');
+    assertEqual(fields[0].key, 'account', 'expected the known entry to keep its plain key');
+    assertEqual(fields[0].group, 'Deal Team', 'expected the detected group to survive a read round-trip');
+  });
+
   test('get filters persisted *_input companions when the base field already exists in the registry', async () => {
     const stub = createChromeStub({
       'sncrm.discovery.v1': [

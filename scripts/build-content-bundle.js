@@ -13,6 +13,7 @@ const sourceFiles = [
   'src/shared/discovery-storage.js',
   'src/shared/messages.js',
   'src/shared/markdown.js',
+  'src/shared/clipboard.js',
   'src/shared/dates.js',
   'src/content/field-registry.js',
   'src/content/extractors.js',
