@@ -155,6 +155,56 @@ test('badge fields render pill-style tags', () => {
   dom.window.close();
 });
 
+test('bid_review boolean values render as yes/no pills', () => {
+  const { dom, window, ui } = makeUiHarness();
+  const host = window.document.createElement('div');
+  ui.renderValues(host, ['bid_review'], {
+    bid_review: {
+      key: 'bid_review',
+      found: true,
+      value: 'true',
+      source: 'test'
+    }
+  }, {
+    columns: 3,
+    layout: [{ type: 'field', key: 'bid_review', span: 1 }]
+  });
+
+  const tags = Array.from(host.querySelectorAll('.sncrm-tag')).map((node) => node.textContent.trim());
+  assertEqual(tags.join('|'), 'Yes', 'expected a true badge value to render as Yes');
+
+  dom.window.close();
+});
+
+test('apps_comments renders as a full-width markdown block without a copy button', () => {
+  const { dom, window, ui } = makeUiHarness();
+  setViewportWidth(window, 1440);
+  const host = window.document.createElement('div');
+  ui.renderValues(host, ['apps_comments'], {
+    apps_comments: {
+      key: 'apps_comments',
+      found: true,
+      value: 'Needs a partner review.',
+      source: 'test'
+    }
+  }, {
+    columns: 3,
+    layout: [{ type: 'field', key: 'apps_comments' }]
+  });
+
+  const block = host.querySelector('.sncrm-md-apps_comments');
+  assert(block, 'expected APPS Comments to render as a markdown block');
+  assertEqual(block.style.gridColumn, 'span 3', 'expected markdown fields to span the full grid');
+  assertEqual(
+    block.querySelector('.sncrm-md-body').textContent,
+    'Needs a partner review.',
+    'expected the comment value to render inside the markdown body'
+  );
+  assert(!block.querySelector('.sncrm-md-copy'), 'expected only the Description block to offer a copy button');
+
+  dom.window.close();
+});
+
 test('layout rendering keeps explicit spacers and spans', () => {
   const { dom, window, ui } = makeUiHarness();
   const host = window.document.createElement('div');

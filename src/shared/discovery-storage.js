@@ -28,6 +28,7 @@
       case 'badge-list':
       case 'date':
       case 'link':
+      case 'markdown':
         return value;
       default:
         return 'text';
@@ -92,6 +93,16 @@
         key = detectedKeyFor(serviceNowName);
       }
     }
+    /* A discovered field can become part of the static registry later. Fold
+     * those stale `detected:` entries into `known` ones so the options page
+     * stops reporting them as changes while their live section still wins. */
+    const staticNow = reason !== 'known' &&
+      NS.fieldRegistry &&
+      typeof NS.fieldRegistry.hasStaticField === 'function' &&
+      NS.fieldRegistry.hasStaticField(serviceNowName);
+    if (staticNow) {
+      key = serviceNowName;
+    }
     const firstSeenAt = Number.isFinite(item.firstSeenAt) ? Math.round(item.firstSeenAt) : now;
     const lastSeenAt = Number.isFinite(item.lastSeenAt) ? Math.round(item.lastSeenAt) : now;
     const normalized = {
@@ -100,7 +111,7 @@
       label,
       group: normalizeGroup(item.group),
       renderAs: normalizeRenderAs(item.renderAs),
-      reason,
+      reason: staticNow ? 'known' : reason,
       firstSeenAt: Math.min(firstSeenAt, lastSeenAt),
       lastSeenAt: Math.max(firstSeenAt, lastSeenAt)
     };

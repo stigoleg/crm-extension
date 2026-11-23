@@ -175,6 +175,20 @@ async function run() {
     assertEqual(settings.fieldLayout[1].span, 3, 'markdown fields should default to full-width in a 3-column layout');
   });
 
+  test('apps_comments uses full-width layout when built from selected fields', async () => {
+    const stub = createChromeStub({
+      'sncrm.settings.v1.selectedFields': ['account', 'apps_comments']
+    });
+    const storage = loadStorage(stub.chrome);
+
+    const settings = await storage.get();
+
+    assertEqual(settings.fieldLayout.length, 2, 'expected both selected fields to become layout items');
+    assertEqual(settings.fieldLayout[0].span, 1, 'expected the regular field to stay one column');
+    assertEqual(settings.fieldLayout[1].key, 'apps_comments', 'expected APPS Comments to keep its key');
+    assertEqual(settings.fieldLayout[1].span, 3, 'expected APPS Comments to default to full width');
+  });
+
   test('manual original Description height below 220 survives normalization', async () => {
     const stub = createChromeStub({
       'sncrm.settings.v1.originalDescriptionHeight': 156

@@ -137,9 +137,11 @@ function loadDiscoveryStore(fakeChrome) {
               'account',
               'close_date',
               'due_date',
+              'internal_due_date',
               'apps_client_developer',
               'apps_market_offering',
               'apps_opportunity_manager',
+              'apps_substatus',
               'advisory_bid_manager'
             ].includes(serviceNowName);
           }
@@ -374,6 +376,62 @@ async function run() {
 
     assertEqual(fields.length, 1, 'expected persisted -date companions and bare _input names to be filtered out on read');
     assertEqual(fields[0].serviceNowName, 'partner_focus', 'expected legitimate discoveries to remain after filtering internal control names');
+  });
+
+  test('get converts stale discoveries whose ServiceNow name is now a static field', async () => {
+    const stub = createChromeStub({
+      'sncrm.discovery.v1': [
+        {
+          key: 'detected:internal_due_date',
+          serviceNowName: 'internal_due_date',
+          label: 'Internal Due Date',
+          group: 'Opportunity Information',
+          renderAs: 'text',
+          reason: 'name-change',
+          matchedRegistryKey: 'due_date',
+          firstSeenAt: 1,
+          lastSeenAt: 2
+        },
+        {
+          key: 'detected:partner_focus',
+          serviceNowName: 'partner_focus',
+          label: 'Partner Focus',
+          group: 'Opportunity Information',
+          renderAs: 'text',
+          reason: 'new-field',
+          firstSeenAt: 2,
+          lastSeenAt: 3
+        }
+      ]
+    });
+    const discoveryStore = loadDiscoveryStore(stub.chrome);
+
+    const fields = await discoveryStore.get();
+
+    assertEqual(fields.length, 2, 'expected both entries to survive normalization');
+    const promoted = fields.find((field) => field.serviceNowName === 'internal_due_date');
+    assert(promoted, 'expected the now-static field to remain visible');
+    assertEqual(promoted.key, 'internal_due_date', 'expected the static key to replace the detected: key');
+    assertEqual(promoted.reason, 'known', 'expected the entry to be folded into the known-field space');
+    assertEqual(promoted.group, 'Opportunity Information', 'expected the live section to survive the promotion');
+  });
+
+  test('get preserves markdown render hints for discovered fields', async () => {
+    const stub = createChromeStub();
+    const discoveryStore = loadDiscoveryStore(stub.chrome);
+
+    await discoveryStore.merge([{
+      serviceNowName: 'partner_comments',
+      label: 'Partner Comments',
+      group: 'Opportunity Information',
+      renderAs: 'markdown',
+      reason: 'new-field'
+    }]);
+    const fields = await discoveryStore.get();
+
+    assertEqual(fields.length, 1, 'expected one stored discovery');
+    assertEqual(fields[0].renderAs, 'markdown', 'expected markdown render hints to survive persistence');
+    assertEqual(fields[0].key, 'detected:partner_comments', 'expected unknown fields to keep the detected: key space');
   });
 
   await Promise.all(pending);

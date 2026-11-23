@@ -284,6 +284,151 @@ async function run() {
     dom.window.close();
   });
 
+  test('detected field card hides discoveries that became static registry fields', async () => {
+    const dom = makeDom();
+    const { window } = dom;
+
+    const settings = {
+      enabled: true,
+      debug: false,
+      defaultCollapsed: false,
+      columns: 3,
+      autoExpandSections: true,
+      panelHeightPercent: 50,
+      panelFullHeight: true,
+      descriptionAutoHeight: true,
+      enhanceOriginalDescription: false,
+      largeOriginalDescription: false,
+      fieldLayout: [{ type: 'field', key: 'account', span: 1 }],
+      selectedFields: ['account']
+    };
+
+    window.SNCRM = {
+      storage: {
+        DEFAULTS: JSON.parse(JSON.stringify(settings)),
+        async get() {
+          return JSON.parse(JSON.stringify(settings));
+        },
+        async set(patch) {
+          Object.assign(settings, patch);
+          return JSON.parse(JSON.stringify(settings));
+        },
+        onChange() {}
+      },
+      discoveryStore: {
+        async get() {
+          return [
+            {
+              key: 'detected:internal_due_date',
+              serviceNowName: 'internal_due_date',
+              label: 'Internal Due Date',
+              group: 'Opportunity Information',
+              renderAs: 'text',
+              reason: 'name-change',
+              matchedRegistryKey: 'due_date',
+              firstSeenAt: 1,
+              lastSeenAt: 1
+            },
+            {
+              key: 'detected:partner_focus',
+              serviceNowName: 'partner_focus',
+              label: 'Partner Focus',
+              group: 'Opportunity Information',
+              renderAs: 'text',
+              reason: 'new-field',
+              firstSeenAt: 1,
+              lastSeenAt: 1
+            }
+          ];
+        },
+        onChange() {}
+      }
+    };
+
+    loadScript(window, 'src/content/field-registry.js');
+    loadScript(window, 'src/options/options.js');
+    await delay(40);
+
+    const detectedCard = window.document.getElementById('detectedFieldsCard');
+    assertEqual(detectedCard.hidden, false, 'expected the card to stay visible for genuinely new fields');
+    assert(
+      !window.document.querySelector('#detectedFields input[data-key="detected:internal_due_date"]'),
+      'expected a field that now exists in the static registry to disappear from the detected card'
+    );
+    assert(
+      window.document.querySelector('#detectedFields input[data-key="detected:partner_focus"]'),
+      'expected a genuinely new field to stay in the detected card'
+    );
+    const labels = Array.from(window.document.querySelectorAll('#fields label')).map((node) => node.textContent.trim());
+    assert(labels.some((text) => text.startsWith('Internal Due Date')), 'expected the promoted field to appear in the regular Fields card');
+
+    dom.window.close();
+  });
+
+  test('selected detected layout keys migrate to the static registry key on boot', async () => {
+    const dom = makeDom();
+    const { window } = dom;
+
+    const savedPatches = [];
+    const settings = {
+      enabled: true,
+      debug: false,
+      defaultCollapsed: false,
+      columns: 3,
+      autoExpandSections: true,
+      panelHeightPercent: 50,
+      panelFullHeight: true,
+      descriptionAutoHeight: true,
+      enhanceOriginalDescription: false,
+      largeOriginalDescription: false,
+      fieldLayout: [
+        { type: 'field', key: 'account', span: 1 },
+        { type: 'field', key: 'detected:internal_due_date', span: 1 }
+      ],
+      selectedFields: ['account', 'detected:internal_due_date']
+    };
+
+    window.SNCRM = {
+      storage: {
+        DEFAULTS: JSON.parse(JSON.stringify(settings)),
+        async get() {
+          return JSON.parse(JSON.stringify(settings));
+        },
+        async set(patch) {
+          savedPatches.push(JSON.parse(JSON.stringify(patch)));
+          Object.assign(settings, patch);
+          return JSON.parse(JSON.stringify(settings));
+        },
+        onChange() {}
+      },
+      discoveryStore: {
+        async get() {
+          return [];
+        },
+        onChange() {}
+      }
+    };
+
+    loadScript(window, 'src/content/field-registry.js');
+    loadScript(window, 'src/options/options.js');
+    await delay(40);
+
+    const migration = savedPatches.find((patch) => Array.isArray(patch.fieldLayout));
+    assert(migration, 'expected the boot migration to persist the canonical layout');
+    assertEqual(
+      migration.fieldLayout[1].key,
+      'internal_due_date',
+      'expected the detected:layout key to migrate to the static registry key'
+    );
+    assertEqual(
+      migration.selectedFields.join(','),
+      'account,internal_due_date',
+      'expected selectedFields to follow the canonical layout'
+    );
+
+    dom.window.close();
+  });
+
   await Promise.all(pending);
   console.log(`\n${passed} passed, ${failed} failed`);
   process.exit(failed === 0 ? 0 : 1);

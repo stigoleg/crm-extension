@@ -66,12 +66,21 @@
     return '';
   }
 
+  /* Boolean-ish values render as friendly pills for `renderAs: 'badge'`
+   * fields (for example Bid Review), without touching name-valued badges. */
+  function badgeText(value) {
+    const raw = String(value || '').trim();
+    if (/^true$/i.test(raw)) return 'Yes';
+    if (/^false$/i.test(raw)) return 'No';
+    return raw;
+  }
+
   function badgeItemsFor(meta, result) {
     if (result && Array.isArray(result.badges) && result.badges.length) {
-      return result.badges;
+      return result.badges.map(badgeText);
     }
     if (meta.renderAs === 'badge-list') return splitBadgeItems(result && result.value);
-    if (meta.renderAs === 'badge') return result && result.value ? [String(result.value).trim()] : [];
+    if (meta.renderAs === 'badge') return result && result.value ? [badgeText(result.value)] : [];
     return [];
   }
 

@@ -343,6 +343,168 @@ async function run() {
     dom.window.close();
   });
 
+  test('discoverFields recognizes every newly integrated ServiceNow column as known', async () => {
+    const dom = makeDom(`
+      <body>
+        <div id="scope">
+          <span class="sn-section-header collapsable" aria-expanded="true">Opportunity Information</span>
+          <div class="field"><label for="internal_due_date">Internal Due Date</label><input id="internal_due_date" name="internal_due_date" value="30.04.2026"></div>
+          <span class="sn-section-header collapsable" aria-expanded="true">APPS Status</span>
+          <div class="field"><label for="apps_comments">APPS Comments</label><textarea id="apps_comments" name="apps_comments">Needs a partner review.</textarea></div>
+          <div class="field"><label for="apps_demand_state">APPS Demand State</label><input id="apps_demand_state" name="apps_demand_state" value="Qualified"></div>
+          <div class="field"><label for="apps_opportunity_owner">APPS Opportunity Owner</label><input id="apps_opportunity_owner" name="apps_opportunity_owner" value="Jane Doe"></div>
+          <div class="field"><label for="apps_substatus">APPS Substatus</label><input id="apps_substatus" name="apps_substatus" value="Active"></div>
+          <div class="field"><label for="bid_review">Bid Review</label><input id="bid_review" name="bid_review" value="true"></div>
+          <span class="sn-section-header collapsable" aria-expanded="true">DPS Status</span>
+          <div class="field"><label for="dps_demand_state">DPS Demand State</label><input id="dps_demand_state" name="dps_demand_state" value="Qualified"></div>
+          <span class="sn-section-header collapsable" aria-expanded="true">Advisory Status</span>
+          <div class="field"><label for="advisory_business_domain">Advisory Business Domain</label><input id="advisory_business_domain" name="advisory_business_domain" value="Banking"></div>
+          <div class="field"><label for="advisory_demand_state">Advisory Demand State</label><input id="advisory_demand_state" name="advisory_demand_state" value="Qualified"></div>
+          <div class="field"><label for="advisory_substatus">Advisory Substatus</label><input id="advisory_substatus" name="advisory_substatus" value="Active"></div>
+          <span class="sn-section-header collapsable" aria-expanded="true">System Information</span>
+          <div class="field"><label for="lead">Lead</label><input id="lead" name="lead" value="Jane Doe"></div>
+          <div class="field"><label for="primary_event_source">Primary Event Source</label><input id="primary_event_source" name="primary_event_source" value="Event"></div>
+        </div>
+      </body>
+    `, 'https://thehub.soprasteria.com/x/ssasi/crm/record/x_ssasi_crm_opportunity/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    const { window } = dom;
+
+    loadExtractorHarness(window);
+
+    const { discoverFields } = window.SNCRM.extractors;
+    const result = discoverFields(window.document.getElementById('scope'));
+    const byName = Object.fromEntries(result.discoveries.map((field) => [field.serviceNowName, field]));
+
+    const expectedKeys = [
+      'internal_due_date',
+      'apps_comments',
+      'apps_demand_state',
+      'apps_opportunity_owner',
+      'apps_substatus',
+      'bid_review',
+      'dps_demand_state',
+      'advisory_business_domain',
+      'advisory_demand_state',
+      'advisory_substatus',
+      'lead',
+      'primary_event_source'
+    ];
+    assertEqual(result.discoveries.length, expectedKeys.length, 'expected one discovery per integrated column');
+    for (const name of expectedKeys) {
+      const field = byName[name];
+      assert(field, `expected ${name} to be discovered`);
+      assertEqual(field.reason, 'known', `expected ${name} to register as a known field`);
+      assertEqual(field.key, name, `expected ${name} to use its static registry key`);
+    }
+    assert(!result.discoveries.some((field) => field.key.startsWith('detected:')), 'expected no new detected fields for integrated names');
+
+    assertEqual(byName.internal_due_date.group, 'Opportunity Information', 'expected Internal Due Date to stay in Opportunity Information');
+    assertEqual(byName.internal_due_date.renderAs, 'date', 'expected Internal Due Date to render as a date');
+    assertEqual(byName.apps_comments.group, 'APPS Status', 'expected APPS Comments to stay in APPS Status');
+    assertEqual(byName.apps_comments.renderAs, 'markdown', 'expected APPS Comments to render as a markdown block');
+    assertEqual(byName.bid_review.renderAs, 'badge', 'expected Bid Review to render as a badge');
+    assertEqual(byName.dps_demand_state.group, 'DPS Status', 'expected the DPS field to stay in DPS Status');
+    assertEqual(byName.advisory_substatus.group, 'Advisory Status', 'expected the Advisory fields to stay in Advisory Status');
+    assertEqual(byName.primary_event_source.group, 'System Information', 'expected Primary Event Source to stay in System Information');
+
+    dom.window.close();
+  });
+
+  test('discoverFields prefers the full label over a shorter ambiguous neighbor', async () => {
+    const dom = makeDom(`
+      <body>
+        <div id="scope">
+          <span class="sn-section-header collapsable" aria-expanded="true">Opportunity Information</span>
+          <div class="field">
+            <input name="internal_review_date" value="30.04.2026">
+            <span class="sn-form-label">Due Date</span>
+            <span class="sn-form-label">Internal Review Date</span>
+          </div>
+        </div>
+      </body>
+    `, 'https://thehub.soprasteria.com/x/ssasi/crm/record/x_ssasi_crm_opportunity/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    const { window } = dom;
+
+    loadExtractorHarness(window);
+
+    const { discoverFields } = window.SNCRM.extractors;
+    const result = discoverFields(window.document.getElementById('scope'));
+
+    assertEqual(result.discoveries.length, 1, 'expected one discovered field');
+    assertEqual(
+      result.discoveries[0].label,
+      'Internal Review Date',
+      'expected the label covering the whole field name to win over a shorter neighbor'
+    );
+    assertEqual(result.discoveries[0].reason, 'new-field', 'expected the unknown column to stay a new field');
+
+    dom.window.close();
+  });
+
+  test('discoverFields infers markdown for long-form field names', async () => {
+    const dom = makeDom(`
+      <body>
+        <div id="scope">
+          <span class="sn-section-header collapsable" aria-expanded="true">APPS Status</span>
+          <div class="field"><label for="delivery_comments">Delivery Comments</label><textarea id="delivery_comments" name="delivery_comments">Needs a partner review.</textarea></div>
+        </div>
+      </body>
+    `, 'https://thehub.soprasteria.com/x/ssasi/crm/record/x_ssasi_crm_opportunity/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    const { window } = dom;
+
+    loadExtractorHarness(window);
+
+    const { discoverFields } = window.SNCRM.extractors;
+    const result = discoverFields(window.document.getElementById('scope'));
+
+    assertEqual(result.discoveries.length, 1, 'expected one discovered field');
+    assertEqual(result.discoveries[0].renderAs, 'markdown', 'expected comments-shaped names to infer markdown rendering');
+
+    dom.window.close();
+  });
+
+  test('extractAll reads the newly integrated date, markdown, and badge fields', async () => {
+    const dom = makeDom(`
+      <body>
+        <div id="scope">
+          <span class="sn-section-header collapsable" aria-expanded="true">Opportunity Information</span>
+          <div class="field">
+            <label for="internal_due_date">Internal Due Date</label>
+            <now-record-string id="internal_due_date" name="internal_due_date" value="30.04.2026"></now-record-string>
+          </div>
+          <span class="sn-section-header collapsable" aria-expanded="true">APPS Status</span>
+          <div class="field">
+            <label for="apps_comments">APPS Comments</label>
+            <now-record-textarea id="apps_comments" name="apps_comments">Needs a partner review.</now-record-textarea>
+          </div>
+          <div class="field">
+            <label for="bid_review">Bid Review</label>
+            <now-record-checkbox id="bid_review" name="bid_review" value="true"></now-record-checkbox>
+          </div>
+        </div>
+      </body>
+    `, 'https://thehub.soprasteria.com/x/ssasi/crm/record/x_ssasi_crm_opportunity/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
+    const { window } = dom;
+
+    loadExtractorHarness(window);
+
+    const { extractAll } = window.SNCRM.extractors;
+    const results = extractAll(window.document.getElementById('scope'), [
+      'internal_due_date',
+      'apps_comments',
+      'bid_review'
+    ]);
+
+    assertEqual(results.internal_due_date.found, true, 'expected Internal Due Date to be found by column name');
+    assertEqual(results.internal_due_date.value, '30.04.2026', 'expected the date value to be read verbatim');
+    assertEqual(results.apps_comments.found, true, 'expected APPS Comments to be found by column name');
+    assertEqual(results.apps_comments.value, 'Needs a partner review.', 'expected long-form text to be read');
+    assertEqual(results.bid_review.found, true, 'expected Bid Review to be found by column name');
+    assertEqual(results.bid_review.value, 'true', 'expected the boolean value to survive extraction');
+
+    dom.window.close();
+  });
+
   test('controller loads selected discovered fields before first render', async () => {
     const dom = makeDom(`
       <body>
@@ -477,7 +639,7 @@ async function run() {
     dom.window.close();
   });
 
-  test('controller discovery scan runs once per stable scope and local discovery changes do not rerender unselected fields', async () => {
+  test('controller rescans discovery on manual refresh without rerendering unchanged values', async () => {
     const dom = makeDom(`
       <body>
         <div id="record">
@@ -662,7 +824,7 @@ async function run() {
     await delay(20);
 
     assertEqual(renderValueCalls, 1, 'expected unchanged refreshes to keep skipping the overview rerender');
-    assertEqual(mergeCalls, 1, 'expected the discovery scan to stay one-shot for the stable record scope');
+    assertEqual(mergeCalls, 2, 'expected manual refresh to re-run the discovery scan for the stable record scope');
 
     discoveryListener([{
       key: 'detected:another_field',

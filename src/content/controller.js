@@ -583,6 +583,7 @@
     }
     if (msg.type === MSG.REFRESH) {
       markExtractorCacheDirty();
+      resetDiscoveryTracking();
       scheduleRefresh(true, { resetSectionExpansion: true });
       sendResponse({ ok: true });
       return true;
@@ -793,6 +794,7 @@
           if (!isRecordOutsidePanel(record, panel)) continue;
           if (!isExpandedSectionMutation(record)) continue;
           markExtractorCacheDirty();
+          resetDiscoveryTracking();
           scheduleRefresh(true, { idle: true, resetRevalidate: true });
           return;
         }
@@ -996,7 +998,10 @@
         btn.textContent = collapsed ? ui.TOGGLE_SHOW : ui.TOGGLE_HIDE;
         btn.setAttribute('aria-expanded', String(!collapsed));
       },
-      onRefresh: () => scheduleRefresh(true, { resetSectionExpansion: true }),
+      onRefresh: () => {
+        resetDiscoveryTracking();
+        scheduleRefresh(true, { resetSectionExpansion: true });
+      },
       onConfigure: () => {
         NS.messages.send({ type: MSG.OPEN_OPTIONS });
       }
@@ -1261,6 +1266,11 @@
       });
       return { stale: true };
     }
+    /* Discovery is independent of the rendered value diff: expanding a
+     * section or pressing Refresh must be able to surface new fields even
+     * when every currently selected field still reads the same value. The
+     * per-scope key guard inside scheduleDiscoveryScan keeps this cheap. */
+    scheduleDiscoveryScan(token, scope);
 
     const responsiveColumns = effectiveColumns();
     const key = token + '|' + resultsFingerprint(
@@ -1284,7 +1294,6 @@
       descriptionAutoHeight: settings.descriptionAutoHeight,
       layout: settings.fieldLayout
     });
-    scheduleDiscoveryScan(token, scope);
     applyHeightMode(cachedShell.panel);
     if (NS.log.debugEnabled) {
       const summary = Object.fromEntries(

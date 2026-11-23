@@ -28,6 +28,7 @@
     { key: 'stage',                          label: 'Stage',                         aliases: ['stage', 'sales stage'],            group: 'Opportunity Information' },
     { key: 'status',                         label: 'Status',                        aliases: ['status'],                          group: 'Opportunity Information' },
     { key: 'due_date',                       label: 'Due Date',                      aliases: ['due date'],                        group: 'Opportunity Information',  renderAs: 'date' },
+    { key: 'internal_due_date',              label: 'Internal Due Date',             aliases: ['internal due date'],               group: 'Opportunity Information',  renderAs: 'date' },
     { key: 'close_date',                     label: 'Close Date',                    aliases: ['close date', 'expected close'],    group: 'Opportunity Information',  renderAs: 'date' },
     { key: 'type',                           label: 'Type',                          aliases: ['type'],                            group: 'Opportunity Information' },
     { key: 'probability',                    label: 'Probability',                   aliases: ['probability'],                     group: 'Opportunity Information' },
@@ -75,12 +76,18 @@
     { key: 'apps_market_offering',           label: 'APPS Market Offering',          aliases: ['apps market offering'],            group: 'APPS Status' },
     { key: 'apps_community',                 label: 'APPS Community',                aliases: ['apps community'],                  group: 'APPS Status',              renderAs: 'badge-list' },
     { key: 'apps_funnel',                    label: 'APPS Funnel',                   aliases: ['apps funnel'],                     group: 'APPS Status' },
+    { key: 'apps_comments',                  label: 'APPS Comments',                 aliases: ['apps comments', 'app comments'],   group: 'APPS Status',              renderAs: 'markdown' },
+    { key: 'apps_demand_state',              label: 'APPS Demand State',             aliases: ['apps demand state'],               group: 'APPS Status' },
+    { key: 'apps_opportunity_owner',         label: 'APPS Opportunity Owner',        aliases: ['apps opportunity owner'],          group: 'APPS Status' },
+    { key: 'apps_substatus',                 label: 'APPS Substatus',                aliases: ['apps substatus', 'apps sub status'], group: 'APPS Status' },
+    { key: 'bid_review',                     label: 'Bid Review',                    aliases: ['bid review'],                      group: 'APPS Status',              renderAs: 'badge' },
 
     // DPS Status
     { key: 'dps_client_developer',           label: 'DPS Client Developer',          aliases: ['dps client developer'],            group: 'DPS Status' },
     { key: 'dps_bid_manager',                label: 'DPS Bid Manager',               aliases: ['dps bid manager'],                 group: 'DPS Status' },
     { key: 'dps_community',                  label: 'DPS Community',                 aliases: ['dps community'],                   group: 'DPS Status',               renderAs: 'badge-list' },
     { key: 'dps_go2market',                  label: 'DPS Go2Market',                 aliases: ['dps go2market'],                   group: 'DPS Status' },
+    { key: 'dps_demand_state',               label: 'DPS Demand State',              aliases: ['dps demand state'],                group: 'DPS Status' },
 
     // Advisory Status
     { key: 'advisory_client_developer',      label: 'Advisory Client Developer',     aliases: ['advisory client developer'],       group: 'Advisory Status' },
@@ -91,6 +98,9 @@
     { key: 'advisory_go2market_offering',    label: 'Advisory Go2Market Offering',   aliases: ['advisory go2market offering'],     group: 'Advisory Status' },
     { key: 'advisory_community',             label: 'Advisory Community',            aliases: ['advisory community'],              group: 'Advisory Status',          renderAs: 'badge-list' },
     { key: 'advisory_priority',              label: 'Advisory Priority',             aliases: ['advisory priority'],               group: 'Advisory Status' },
+    { key: 'advisory_business_domain',       label: 'Advisory Business Domain',      aliases: ['advisory business domain'],        group: 'Advisory Status' },
+    { key: 'advisory_demand_state',          label: 'Advisory Demand State',         aliases: ['advisory demand state'],           group: 'Advisory Status' },
+    { key: 'advisory_substatus',             label: 'Advisory Substatus',            aliases: ['advisory substatus', 'advisory sub status'], group: 'Advisory Status' },
 
     // System Information
     { key: 'number',                         label: 'Number',                        aliases: ['number'],                          group: 'System Information' },
@@ -98,7 +108,9 @@
     { key: 'sys_created_by',                 label: 'Created By',                    aliases: ['created by', 'sys created by'],    group: 'System Information' },
     { key: 'sys_updated_on',                 label: 'Updated',                       aliases: ['updated', 'updated on', 'sys updated on'], group: 'System Information' },
     { key: 'sys_updated_by',                 label: 'Updated By',                    aliases: ['updated by', 'sys updated by'],    group: 'System Information' },
-    { key: 'source',                         label: 'Source',                        aliases: ['source'],                          group: 'System Information' }
+    { key: 'source',                         label: 'Source',                        aliases: ['source'],                          group: 'System Information' },
+    { key: 'lead',                           label: 'Lead',                          aliases: ['lead'],                            group: 'System Information' },
+    { key: 'primary_event_source',           label: 'Primary Event Source',          aliases: ['primary event source'],            group: 'System Information' }
   ];
 
   function escapeCssIdentifier(value) {

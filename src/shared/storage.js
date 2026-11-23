@@ -5,7 +5,7 @@
   const log = NS.log.make('storage');
   const DEFAULT_COLUMNS = 3;
   const MAX_LAYOUT_COLUMNS = 4;
-  const FULL_SPAN_KEYS = new Set(['description', 'next_step']);
+  const FULL_SPAN_KEYS = new Set(['description', 'next_step', 'apps_comments']);
 
   const DEFAULT_FIELDS = [
     'account',

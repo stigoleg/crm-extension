@@ -18,6 +18,7 @@
   const URL_RE = /^https?:\/\/\S+$/i;
   const SYS_ID_RE = /^[a-f0-9]{32}(,[a-f0-9]{32})*$/i;
   const DATE_FIELD_HINT_RE = /\b(date|deadline|due|created|updated|start|end|extension|close)\b/i;
+  const LONG_FORM_FIELD_RE = /(^|_)(comments?|description|notes?|remarks?|details?)(_|$)/i;
   let queryCacheByRoot = new WeakMap();
   let deepTraversalCacheByRoot = new WeakMap();
   let extractionContextByRoot = new WeakMap();
@@ -304,30 +305,46 @@
     return Array.from(new Set(tokens));
   }
 
+  /* Score a DOM label against the ServiceNow column name. Multi-field
+   * containers expose every sibling label, so a short neighbor ("Due Date")
+   * must not outrank the real label for `internal_due_date`. Purity rejects
+   * labels that mention words the column name does not; the total number of
+   * matched tokens ranks the survivors, so the longest truthful label wins. */
   function detectedLabelScore(label, serviceNowName) {
     const labelTokenList = labelTokens(label);
-    if (labelTokenList.length === 0) return 0;
+    if (labelTokenList.length === 0) return null;
     const expectedTokens = new Set(labelTokens(friendlyDetectedLabel(serviceNowName)));
-    let matches = 0;
+    if (expectedTokens.size === 0) return null;
+    let matched = 0;
     for (const token of labelTokenList) {
-      if (expectedTokens.has(token)) matches++;
+      if (expectedTokens.has(token)) matched++;
     }
-    return matches / labelTokenList.length;
+    if (matched === 0) return null;
+    const purity = matched / labelTokenList.length;
+    if (purity < 0.75) return null;
+    return {
+      label,
+      matched,
+      purity,
+      coverage: matched / expectedTokens.size
+    };
   }
 
   function bestDetectedLabel(labels, serviceNowName) {
-    let bestLabel = '';
-    let bestScore = 0;
+    let best = null;
     for (const label of labels) {
       const score = detectedLabelScore(label, serviceNowName);
-      if (score > bestScore) {
-        bestLabel = label;
-        bestScore = score;
+      if (!score) continue;
+      if (
+        !best ||
+        score.matched > best.matched ||
+        (score.matched === best.matched && score.coverage > best.coverage) ||
+        (score.matched === best.matched && score.coverage === best.coverage && score.purity > best.purity)
+      ) {
+        best = score;
       }
     }
-    if (bestScore >= 0.75) {
-      return { label: bestLabel, fallback: false };
-    }
+    if (best) return { label: best.label, fallback: false };
     return {
       label: friendlyDetectedLabel(serviceNowName),
       fallback: true
@@ -408,6 +425,8 @@
       const hint = `${label} ${friendlyDetectedLabel(serviceNowName)}`;
       if (DATE_FIELD_HINT_RE.test(hint) && parseSnDate(valueText)) return 'date';
     }
+
+    if (LONG_FORM_FIELD_RE.test(String(serviceNowName || ''))) return 'markdown';
 
     return 'text';
   }

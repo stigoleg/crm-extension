@@ -504,7 +504,12 @@
 
   function renderDetectedFields() {
     detectedFieldsHost.replaceChildren();
-    const newFields = discoveredFields.filter((field) => field && isDetectedKey(field.key));
+    const newFields = discoveredFields.filter((field) => (
+      field &&
+      isDetectedKey(field.key) &&
+      !(typeof fieldRegistry.hasStaticField === 'function' &&
+        fieldRegistry.hasStaticField(field.serviceNowName))
+    ));
     if (!newFields.length) {
       detectedFieldsCard.hidden = true;
       return;

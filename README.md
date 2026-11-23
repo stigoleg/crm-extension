@@ -37,6 +37,25 @@ If your instance exposes slightly different labels, the extractor normalizes
 whitespace and case, and supports a small alias list per field (see
 `src/content/field-registry.js`). Add aliases there to teach it new variants.
 
+## Adding a newly detected field
+
+The options page reports columns that exist on the live form but not in the
+static catalog. To integrate one:
+
+1. Add an entry to `RAW_FIELDS` in `src/content/field-registry.js`. Use the
+   ServiceNow column name as `key`, the live section heading as `group`, and
+   set `renderAs` when the value is a date (`date`), URL (`link`), pill set
+   (`badge` / `badge-list`), integer (`number`), or long text (`markdown`).
+2. Run `npm run build:content` so `src/content/content-script.bundle.js`
+   picks up the registry change (the manifest loads only the bundle).
+3. Run `npm test`.
+
+Persisted `detected:*` discoveries for a promoted column fold into normal
+`known` entries automatically, and selected `detected:<name>` layout keys
+migrate to the static key on the next boot. Discovery re-runs on manual
+Refresh and when a ServiceNow section is expanded, so new fields can be
+picked up without reloading the record.
+
 ## Architecture
 
 ```
